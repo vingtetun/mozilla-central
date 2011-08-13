@@ -16,11 +16,6 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
     <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT"/>
 
-    <!-- B2G -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="android.permission.DISABLE_KEYGUARD"></uses-permission>
-
-
     <uses-feature android:name="android.hardware.location" android:required="false"/>
     <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
     <uses-feature android:name="android.hardware.touchscreen"/>
@@ -83,10 +78,6 @@
 
         <receiver android:name="NotificationHandler">
             <intent-filter>
-
-                <!-- B2G -->
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-
                 <action android:name="org.mozilla.gecko.ACTION_ALERT_CLICK" />
                 <action android:name="org.mozilla.gecko.ACTION_ALERT_CLEAR" />
             </intent-filter>
