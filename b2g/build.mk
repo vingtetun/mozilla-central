@@ -11,14 +11,15 @@
 # for the specific language governing rights and limitations under the
 # License.
 #
-# The Original Code is Mozilla Breakpad integration
+# The Original Code is Mozilla.
 #
 # The Initial Developer of the Original Code is
-# Ted Mielczarek <ted.mielczarek@gmail.com>
+# the Mozilla Foundation <http://www.mozilla.org/>.
 # Portions created by the Initial Developer are Copyright (C) 2007
 # the Initial Developer. All Rights Reserved.
 #
 # Contributor(s):
+#   Mark Finkle <mfinkle@mozilla.com>
 #
 # Alternatively, the contents of this file may be used under the terms of
 # either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -34,46 +35,63 @@
 #
 # ***** END LICENSE BLOCK *****
 
-DEPTH		= ../../../../../../..
-topsrcdir	= @top_srcdir@
-srcdir		= @srcdir@
-VPATH		= @srcdir@
+ifndef LIBXUL_SDK
+# Needed for building our components as part of libxul
+APP_LIBXUL_DIRS += mobile/components/build
 
-include $(DEPTH)/config/autoconf.mk
-
-ifdef MOZ_THUMB2 #{
-# The syscall number is passed through r7 in the linux ARM ABI, but r7
-# is also the THUMB frame pointer.  (Unfortunate, but ah well.)  gcc
-# complains if we store to r7, not unreasonably, but complains
-# inconsistently.  The generic syscall template pushes/stores to/pops
-# r7 with no complaint from gcc, but the sys_clone() function marks r7
-# as a clobbered register yet gcc error's.  The generated assembly for
-# sys_clone() looks OK, so we chalk this up to a gcc/gas quirk and
-# work around it by telling gcc that the THUMB frame pointer is a
-# vanilla callee-save register.
-OS_CXXFLAGS += -fomit-frame-pointer
-MOZ_DEBUG_FLAGS := $(filter-out -fno-omit-frame-pointer,$(MOZ_DEBUG_FLAGS))
-MOZ_FRAMEPTR_FLAGS := $(filter-out -fno-omit-frame-pointer,$(MOZ_FRAMEPTR_FLAGS))
-MOZ_OPTIMIZE_FLAGS := $(filter-out -fno-omit-frame-pointer,$(MOZ_OPTIMIZE_FLAGS))
-endif #}
-
-MODULE		= handler
-LIBRARY_NAME	= exception_handler_s
-XPI_NAME 	= crashreporter
-
-LOCAL_INCLUDES 	= -I$(srcdir)/../../..
-
-CPPSRCS	= \
-  exception_handler.cc \
+include $(topsrcdir)/toolkit/toolkit-tiers.mk
+else
+ifdef ENABLE_TESTS
+tier_testharness_dirs += \
+  testing/mochitest \
   $(NULL)
-
-# need static lib
-FORCE_STATIC_LIB = 1
-FORCE_USE_PIC = 1
-
-ifeq ($(OS_TARGET),Android)
-# NDK5 workarounds
-DEFINES += -D_STLP_CONST_CONSTRUCTOR_BUG -D_STLP_NO_MEMBER_TEMPLATES
+endif
 endif
 
-include $(topsrcdir)/config/rules.mk
+TIERS += app
+
+ifdef MOZ_EXTENSIONS
+tier_app_dirs += extensions
+endif
+
+ifdef MOZ_SERVICES_SYNC
+tier_app_dirs += services
+endif
+
+tier_app_dirs += \
+  $(MOZ_BRANDING_DIRECTORY) \
+  b2g \
+  $(NULL)
+
+
+installer: 
+	@$(MAKE) -C b2g/installer installer
+
+package:
+	@$(MAKE) -C b2g/installer
+
+install::
+	@echo "Mobile can't be installed directly."
+	@exit 1
+
+deb: package
+	@$(MAKE) -C b2g/installer deb
+
+upload::
+	@$(MAKE) -C b2g/installer upload
+
+ifdef ENABLE_TESTS
+# Implemented in testing/testsuite-targets.mk
+
+mochitest-browser-chrome:
+	$(RUN_MOCHITEST) --browser-chrome
+	$(CHECK_TEST_ERROR)
+
+mochitest:: mochitest-browser-chrome
+
+.PHONY: mochitest-browser-chrome
+endif
+
+ifeq ($(OS_TARGET),Linux)
+deb: installer
+endif

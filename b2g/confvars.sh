@@ -11,14 +11,15 @@
 # for the specific language governing rights and limitations under the
 # License.
 #
-# The Original Code is Mozilla Breakpad integration
+# The Original Code is Mozilla.
 #
 # The Initial Developer of the Original Code is
-# Ted Mielczarek <ted.mielczarek@gmail.com>
+# the Mozilla Foundation <http://www.mozilla.org/>.
 # Portions created by the Initial Developer are Copyright (C) 2007
 # the Initial Developer. All Rights Reserved.
 #
 # Contributor(s):
+#   Mark Finkle <mfinkle@mozilla.com>
 #
 # Alternatively, the contents of this file may be used under the terms of
 # either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -34,46 +35,30 @@
 #
 # ***** END LICENSE BLOCK *****
 
-DEPTH		= ../../../../../../..
-topsrcdir	= @top_srcdir@
-srcdir		= @srcdir@
-VPATH		= @srcdir@
+MOZ_APP_NAME=b2g
+MOZ_APP_UA_NAME=B2G
 
-include $(DEPTH)/config/autoconf.mk
+MOZ_APP_VERSION=9.0a1
 
-ifdef MOZ_THUMB2 #{
-# The syscall number is passed through r7 in the linux ARM ABI, but r7
-# is also the THUMB frame pointer.  (Unfortunate, but ah well.)  gcc
-# complains if we store to r7, not unreasonably, but complains
-# inconsistently.  The generic syscall template pushes/stores to/pops
-# r7 with no complaint from gcc, but the sys_clone() function marks r7
-# as a clobbered register yet gcc error's.  The generated assembly for
-# sys_clone() looks OK, so we chalk this up to a gcc/gas quirk and
-# work around it by telling gcc that the THUMB frame pointer is a
-# vanilla callee-save register.
-OS_CXXFLAGS += -fomit-frame-pointer
-MOZ_DEBUG_FLAGS := $(filter-out -fno-omit-frame-pointer,$(MOZ_DEBUG_FLAGS))
-MOZ_FRAMEPTR_FLAGS := $(filter-out -fno-omit-frame-pointer,$(MOZ_FRAMEPTR_FLAGS))
-MOZ_OPTIMIZE_FLAGS := $(filter-out -fno-omit-frame-pointer,$(MOZ_OPTIMIZE_FLAGS))
-endif #}
+MOZ_BRANDING_DIRECTORY=b2g/branding/unofficial
+MOZ_OFFICIAL_BRANDING_DIRECTORY=b2g/branding/official
+# MOZ_APP_DISPLAYNAME is set by branding/configure.sh
 
-MODULE		= handler
-LIBRARY_NAME	= exception_handler_s
-XPI_NAME 	= crashreporter
+MOZ_SAFE_BROWSING=
+MOZ_SERVICES_SYNC=1
 
-LOCAL_INCLUDES 	= -I$(srcdir)/../../..
+MOZ_DISABLE_DOMCRYPTO=1
 
-CPPSRCS	= \
-  exception_handler.cc \
-  $(NULL)
+if test "$LIBXUL_SDK"; then
+MOZ_XULRUNNER=1
+else
+MOZ_XULRUNNER=
+MOZ_PLACES=1
+fi
 
-# need static lib
-FORCE_STATIC_LIB = 1
-FORCE_USE_PIC = 1
+# Needed for building our components as part of libxul
+MOZ_APP_COMPONENT_LIBS="browsercomps"
+MOZ_APP_COMPONENT_INCLUDE=nsBrowserComponents.h
 
-ifeq ($(OS_TARGET),Android)
-# NDK5 workarounds
-DEFINES += -D_STLP_CONST_CONSTRUCTOR_BUG -D_STLP_NO_MEMBER_TEMPLATES
-endif
-
-include $(topsrcdir)/config/rules.mk
+# use custom widget for html:select
+MOZ_USE_NATIVE_POPUP_WINDOWS=1

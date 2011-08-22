@@ -11,14 +11,15 @@
 # for the specific language governing rights and limitations under the
 # License.
 #
-# The Original Code is Mozilla Breakpad integration
+# The Original Code is Mozilla.
 #
 # The Initial Developer of the Original Code is
-# Ted Mielczarek <ted.mielczarek@gmail.com>
+# the Mozilla Foundation <http://www.mozilla.org/>.
 # Portions created by the Initial Developer are Copyright (C) 2007
 # the Initial Developer. All Rights Reserved.
 #
 # Contributor(s):
+#   Mark Finkle <mfinkle@mozilla.com>
 #
 # Alternatively, the contents of this file may be used under the terms of
 # either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -34,46 +35,28 @@
 #
 # ***** END LICENSE BLOCK *****
 
-DEPTH		= ../../../../../../..
-topsrcdir	= @top_srcdir@
-srcdir		= @srcdir@
-VPATH		= @srcdir@
+add_makefiles "
+netwerk/locales/Makefile
+dom/locales/Makefile
+toolkit/locales/Makefile
+security/manager/locales/Makefile
+b2g/app/Makefile
+b2g/app/profile/extensions/Makefile
+$MOZ_BRANDING_DIRECTORY/Makefile
+$MOZ_BRANDING_DIRECTORY/locales/Makefile
+b2g/chrome/Makefile
+b2g/chrome/tests/Makefile
+b2g/components/Makefile
+b2g/components/build/Makefile
+b2g/modules/Makefile
+b2g/installer/Makefile
+b2g/locales/Makefile
+b2g/Makefile
+b2g/themes/Makefile
+b2g/themes/core/Makefile"
 
-include $(DEPTH)/config/autoconf.mk
-
-ifdef MOZ_THUMB2 #{
-# The syscall number is passed through r7 in the linux ARM ABI, but r7
-# is also the THUMB frame pointer.  (Unfortunate, but ah well.)  gcc
-# complains if we store to r7, not unreasonably, but complains
-# inconsistently.  The generic syscall template pushes/stores to/pops
-# r7 with no complaint from gcc, but the sys_clone() function marks r7
-# as a clobbered register yet gcc error's.  The generated assembly for
-# sys_clone() looks OK, so we chalk this up to a gcc/gas quirk and
-# work around it by telling gcc that the THUMB frame pointer is a
-# vanilla callee-save register.
-OS_CXXFLAGS += -fomit-frame-pointer
-MOZ_DEBUG_FLAGS := $(filter-out -fno-omit-frame-pointer,$(MOZ_DEBUG_FLAGS))
-MOZ_FRAMEPTR_FLAGS := $(filter-out -fno-omit-frame-pointer,$(MOZ_FRAMEPTR_FLAGS))
-MOZ_OPTIMIZE_FLAGS := $(filter-out -fno-omit-frame-pointer,$(MOZ_OPTIMIZE_FLAGS))
-endif #}
-
-MODULE		= handler
-LIBRARY_NAME	= exception_handler_s
-XPI_NAME 	= crashreporter
-
-LOCAL_INCLUDES 	= -I$(srcdir)/../../..
-
-CPPSRCS	= \
-  exception_handler.cc \
-  $(NULL)
-
-# need static lib
-FORCE_STATIC_LIB = 1
-FORCE_USE_PIC = 1
-
-ifeq ($(OS_TARGET),Android)
-# NDK5 workarounds
-DEFINES += -D_STLP_CONST_CONSTRUCTOR_BUG -D_STLP_NO_MEMBER_TEMPLATES
-endif
-
-include $(topsrcdir)/config/rules.mk
+if test -n "$MOZ_UPDATE_PACKAGING"; then
+   add_makefiles "
+     tools/update-packaging/Makefile
+   "
+fi

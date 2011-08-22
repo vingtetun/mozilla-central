@@ -4782,7 +4782,9 @@ esac
 MOZ_ARG_ENABLE_STRING(application,
 [  --enable-application=APP
                           Options include:
+                            b2g (Boot to Gecko)
                             browser (Firefox)
+                            mobile (Firefox for Mobile)
                             xulrunner
                             content/xslt (Standalone Transformiix XSLT)
                             netwerk (Standalone Necko)
