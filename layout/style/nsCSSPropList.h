@@ -2211,8 +2211,9 @@ CSS_PROP_TEXTRESET(
     text-overflow,
     text_overflow,
     TextOverflow,
-    CSS_PROPERTY_PARSE_VALUE,
-    VARIANT_HK | VARIANT_STRING,
+    CSS_PROPERTY_PARSE_VALUE |
+        CSS_PROPERTY_VALUE_PARSER_FUNCTION,
+    0,
     kTextOverflowKTable,
     offsetof(nsStyleTextReset, mTextOverflow),
     eStyleAnimType_None)
@@ -2258,6 +2259,34 @@ CSS_PROP_DISPLAY(
     kBackgroundPositionKTable,
     CSS_PROP_NO_OFFSET,
     eStyleAnimType_Custom)
+CSS_PROP_DISPLAY(
+    -moz-perspective-origin,
+    perspective_origin,
+    CSS_PROP_DOMPROP_PREFIXED(PerspectiveOrigin),
+    CSS_PROPERTY_PARSE_FUNCTION |
+        CSS_PROPERTY_STORES_CALC,
+    0,
+    kBackgroundPositionKTable,
+    CSS_PROP_NO_OFFSET,
+    eStyleAnimType_Custom)
+CSS_PROP_DISPLAY(
+    -moz-perspective,
+    perspective,
+    CSS_PROP_DOMPROP_PREFIXED(Perspective),
+    CSS_PROPERTY_PARSE_VALUE,
+    VARIANT_NONE | VARIANT_INHERIT | VARIANT_LENGTH,
+    nsnull,
+    offsetof(nsStyleDisplay, mChildPerspective),
+    eStyleAnimType_Coord)
+CSS_PROP_DISPLAY(
+    -moz-backface-visibility,
+    backface_visibility,
+    CSS_PROP_DOMPROP_PREFIXED(BackfaceVisibility),
+    CSS_PROPERTY_PARSE_VALUE,
+    VARIANT_HK,
+    kBackfaceVisibilityKTable,
+    offsetof(nsStyleDisplay, mBackfaceVisibility),
+    eStyleAnimType_None)
 CSS_PROP_POSITION(
     top,
     top,

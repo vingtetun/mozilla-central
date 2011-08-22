@@ -22,6 +22,7 @@
  *
  * Contributor(s):
  *   Shawn Wilsher <me@shawnwilsher.com> (Original Author)
+ *   Allison Naaktgeboren <ally@mozilla.com>
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -55,6 +56,7 @@
 #include "nsThreadUtils.h"
 #include "nsNetUtil.h"
 #include "nsIXPConnect.h"
+#include "mozilla/unused.h"
 #include "mozilla/Util.h"
 #include "nsContentUtils.h"
 
@@ -65,6 +67,7 @@
 #define TOPIC_UPDATEPLACES_COMPLETE "places-updatePlaces-complete"
 
 using namespace mozilla::dom;
+using mozilla::unused;
 
 namespace mozilla {
 namespace places {
@@ -566,8 +569,13 @@ public:
     nsCOMPtr<mozIPlaceInfo> place =
       new PlaceInfo(mPlace.placeId, mPlace.guid, uri.forget(), mPlace.title,
                     -1, visits);
+    if (NS_SUCCEEDED(mResult)) {
+      (void)mCallback->HandleResult(place);
+    }
+    else {
+      (void)mCallback->HandleError(mResult, place);
+    }
 
-    (void)mCallback->OnComplete(mResult, place);
     return NS_OK;
   }
 
@@ -1282,10 +1290,11 @@ History::NotifyVisited(nsIURI* aURI)
   nsAutoScriptBlocker scriptBlocker;
 
   if (XRE_GetProcessType() == GeckoProcessType_Default) {
-    mozilla::dom::ContentParent* cpp = 
-      mozilla::dom::ContentParent::GetSingleton(PR_FALSE);
-    if (cpp)
-      (void)cpp->SendNotifyVisited(aURI);
+    nsTArray<ContentParent*> cplist;
+    ContentParent::GetAll(cplist);
+    for (PRUint32 i = 0; i < cplist.Length(); ++i) {
+      unused << cplist[i]->SendNotifyVisited(aURI);
+    }
   }
 
   // If the hash table has not been initialized, then we have nothing to notify
@@ -1788,7 +1797,7 @@ History::SetURITitle(nsIURI* aURI, const nsAString& aTitle)
     mozilla::dom::ContentChild * cpc = 
       mozilla::dom::ContentChild::GetSingleton();
     NS_ASSERTION(cpc, "Content Protocol is NULL!");
-    (void)cpc->SendSetURITitle(aURI, nsDependentString(aTitle));
+    (void)cpc->SendSetURITitle(aURI, nsString(aTitle));
     return NS_OK;
   } 
 

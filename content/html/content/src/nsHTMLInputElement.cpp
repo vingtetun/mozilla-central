@@ -120,12 +120,6 @@
 #include "nsContentUtils.h"
 #include "nsRadioVisitor.h"
 
-#include "nsTextEditRules.h"
-
-// JS headers are needed for the pattern attribute.
-#include "jsapi.h"
-#include "jscntxt.h"
-
 using namespace mozilla::dom;
 
 // XXX align=left, hspace, vspace, border? other nav4 attrs
@@ -2723,7 +2717,8 @@ nsHTMLInputElement::GetTextLength(PRInt32* aTextLength)
 
 NS_IMETHODIMP
 nsHTMLInputElement::SetSelectionRange(PRInt32 aSelectionStart,
-                                      PRInt32 aSelectionEnd)
+                                      PRInt32 aSelectionEnd,
+                                      const nsAString& aDirection)
 {
   nsresult rv = NS_ERROR_FAILURE;
   nsIFormControlFrame* formControlFrame = GetFormControlFrame(PR_TRUE);
@@ -2731,7 +2726,15 @@ nsHTMLInputElement::SetSelectionRange(PRInt32 aSelectionStart,
   if (formControlFrame) {
     nsITextControlFrame* textControlFrame = do_QueryFrame(formControlFrame);
     if (textControlFrame) {
-      rv = textControlFrame->SetSelectionRange(aSelectionStart, aSelectionEnd);
+      // Default to forward, even if not specified.
+      // Note that we don't currently support directionless selections, so
+      // "none" is treated like "forward".
+      nsITextControlFrame::SelectionDirection dir = nsITextControlFrame::eForward;
+      if (aDirection.EqualsLiteral("backward")) {
+        dir = nsITextControlFrame::eBackward;
+      }
+
+      rv = textControlFrame->SetSelectionRange(aSelectionStart, aSelectionEnd, dir);
       if (NS_SUCCEEDED(rv)) {
         rv = textControlFrame->ScrollSelectionIntoView();
       }
@@ -2745,7 +2748,13 @@ NS_IMETHODIMP
 nsHTMLInputElement::GetSelectionStart(PRInt32* aSelectionStart)
 {
   NS_ENSURE_ARG_POINTER(aSelectionStart);
-  
+
+  nsTextEditorState *state = GetEditorState();
+  if (state && state->IsSelectionCached()) {
+    *aSelectionStart = state->GetSelectionProperties().mStart;
+    return NS_OK;
+  }
+
   PRInt32 selEnd;
   return GetSelectionRange(aSelectionStart, &selEnd);
 }
@@ -2753,27 +2762,36 @@ nsHTMLInputElement::GetSelectionStart(PRInt32* aSelectionStart)
 NS_IMETHODIMP
 nsHTMLInputElement::SetSelectionStart(PRInt32 aSelectionStart)
 {
-  nsresult rv = NS_ERROR_FAILURE;
-  nsIFormControlFrame* formControlFrame = GetFormControlFrame(PR_TRUE);
-
-  if (formControlFrame) {
-    nsITextControlFrame* textControlFrame = do_QueryFrame(formControlFrame);
-    if (textControlFrame) {
-      rv = textControlFrame->SetSelectionStart(aSelectionStart);
-      if (NS_SUCCEEDED(rv)) {
-        rv = textControlFrame->ScrollSelectionIntoView();
-      }
-    }
+  nsTextEditorState *state = GetEditorState();
+  if (state && state->IsSelectionCached()) {
+    state->GetSelectionProperties().mStart = aSelectionStart;
+    return NS_OK;
   }
 
-  return rv;
+  nsAutoString direction;
+  nsresult rv = GetSelectionDirection(direction);
+  NS_ENSURE_SUCCESS(rv, rv);
+  PRInt32 start, end;
+  rv = GetSelectionRange(&start, &end);
+  NS_ENSURE_SUCCESS(rv, rv);
+  start = aSelectionStart;
+  if (end < start) {
+    end = start;
+  }
+  return SetSelectionRange(start, end, direction);
 }
 
 NS_IMETHODIMP
 nsHTMLInputElement::GetSelectionEnd(PRInt32* aSelectionEnd)
 {
   NS_ENSURE_ARG_POINTER(aSelectionEnd);
-  
+
+  nsTextEditorState *state = GetEditorState();
+  if (state && state->IsSelectionCached()) {
+    *aSelectionEnd = state->GetSelectionProperties().mEnd;
+    return NS_OK;
+  }
+
   PRInt32 selStart;
   return GetSelectionRange(&selStart, aSelectionEnd);
 }
@@ -2782,20 +2800,23 @@ nsHTMLInputElement::GetSelectionEnd(PRInt32* aSelectionEnd)
 NS_IMETHODIMP
 nsHTMLInputElement::SetSelectionEnd(PRInt32 aSelectionEnd)
 {
-  nsresult rv = NS_ERROR_FAILURE;
-  nsIFormControlFrame* formControlFrame = GetFormControlFrame(PR_TRUE);
-
-  if (formControlFrame) {
-    nsITextControlFrame* textControlFrame = do_QueryFrame(formControlFrame);
-    if (textControlFrame) {
-      rv = textControlFrame->SetSelectionEnd(aSelectionEnd);
-      if (NS_SUCCEEDED(rv)) {
-        rv = textControlFrame->ScrollSelectionIntoView();
-      }
-    }
+  nsTextEditorState *state = GetEditorState();
+  if (state && state->IsSelectionCached()) {
+    state->GetSelectionProperties().mEnd = aSelectionEnd;
+    return NS_OK;
   }
 
-  return rv;
+  nsAutoString direction;
+  nsresult rv = GetSelectionDirection(direction);
+  NS_ENSURE_SUCCESS(rv, rv);
+  PRInt32 start, end;
+  rv = GetSelectionRange(&start, &end);
+  NS_ENSURE_SUCCESS(rv, rv);
+  end = aSelectionEnd;
+  if (start > end) {
+    start = end;
+  }
+  return SetSelectionRange(start, end, direction);
 }
 
 NS_IMETHODIMP
@@ -2830,6 +2851,69 @@ nsHTMLInputElement::GetSelectionRange(PRInt32* aSelectionStart,
     nsITextControlFrame* textControlFrame = do_QueryFrame(formControlFrame);
     if (textControlFrame)
       rv = textControlFrame->GetSelectionRange(aSelectionStart, aSelectionEnd);
+  }
+
+  return rv;
+}
+
+static void
+DirectionToName(nsITextControlFrame::SelectionDirection dir, nsAString& aDirection)
+{
+  if (dir == nsITextControlFrame::eNone) {
+    aDirection.AssignLiteral("none");
+  } else if (dir == nsITextControlFrame::eForward) {
+    aDirection.AssignLiteral("forward");
+  } else if (dir == nsITextControlFrame::eBackward) {
+    aDirection.AssignLiteral("backward");
+  } else {
+    NS_NOTREACHED("Invalid SelectionDirection value");
+  }
+}
+
+NS_IMETHODIMP
+nsHTMLInputElement::GetSelectionDirection(nsAString& aDirection)
+{
+  nsTextEditorState *state = GetEditorState();
+  if (state && state->IsSelectionCached()) {
+    DirectionToName(state->GetSelectionProperties().mDirection, aDirection);
+    return NS_OK;
+  }
+
+  nsresult rv = NS_ERROR_FAILURE;
+  nsIFormControlFrame* formControlFrame = GetFormControlFrame(PR_TRUE);
+
+  if (formControlFrame) {
+    nsITextControlFrame* textControlFrame = do_QueryFrame(formControlFrame);
+    if (textControlFrame) {
+      nsITextControlFrame::SelectionDirection dir;
+      rv = textControlFrame->GetSelectionRange(nsnull, nsnull, &dir);
+      if (NS_SUCCEEDED(rv)) {
+        DirectionToName(dir, aDirection);
+      }
+    }
+  }
+
+  return rv;
+}
+
+NS_IMETHODIMP
+nsHTMLInputElement::SetSelectionDirection(const nsAString& aDirection) {
+  nsTextEditorState *state = GetEditorState();
+  if (state && state->IsSelectionCached()) {
+    nsITextControlFrame::SelectionDirection dir = nsITextControlFrame::eNone;
+    if (aDirection.EqualsLiteral("forward")) {
+      dir = nsITextControlFrame::eForward;
+    } else if (aDirection.EqualsLiteral("backward")) {
+      dir = nsITextControlFrame::eBackward;
+    }
+    state->GetSelectionProperties().mDirection = dir;
+    return NS_OK;
+  }
+
+  PRInt32 start, end;
+  nsresult rv = GetSelectionRange(&start, &end);
+  if (NS_SUCCEEDED(rv)) {
+    rv = SetSelectionRange(start, end, aDirection);
   }
 
   return rv;
@@ -4093,6 +4177,22 @@ nsHTMLInputElement::OnValueChanged(PRBool aNotify)
       && !nsContentUtils::IsFocusedContent((nsIContent*)(this))) {
     UpdateState(aNotify);
   }
+}
+
+NS_IMETHODIMP_(PRBool)
+nsHTMLInputElement::HasCachedSelection()
+{
+  PRBool isCached = PR_FALSE;
+  nsTextEditorState *state = GetEditorState();
+  if (state) {
+    isCached = state->IsSelectionCached() &&
+               state->HasNeverInitializedBefore() &&
+               !state->GetSelectionProperties().IsDefault();
+    if (isCached) {
+      state->WillInitEagerly();
+    }
+  }
+  return isCached;
 }
 
 void

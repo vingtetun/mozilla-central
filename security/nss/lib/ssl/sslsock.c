@@ -40,13 +40,14 @@
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
-/* $Id: sslsock.c,v 1.67.2.2 2011/03/16 19:04:02 alexei.volkov.bugs%sun.com Exp $ */
+/* $Id: sslsock.c,v 1.72 2011/08/17 14:41:16 emaldona%redhat.com Exp $ */
 #include "seccomon.h"
 #include "cert.h"
 #include "keyhi.h"
 #include "ssl.h"
 #include "sslimpl.h"
 #include "sslproto.h"
+#include "sslutil.h"
 #include "nspr.h"
 #include "private/pprio.h"
 #include "blapi.h"
@@ -206,6 +207,7 @@ char lockStatus[] = "Locks are ENABLED.  ";
 /* forward declarations. */
 static sslSocket *ssl_NewSocket(PRBool makeLocks);
 static SECStatus  ssl_MakeLocks(sslSocket *ss);
+static void       ssl_SetDefaultsFromEnvironment(void);
 static PRStatus   ssl_PushIOLayer(sslSocket *ns, PRFileDesc *stack, 
                                   PRDescIdentity id);
 
@@ -821,6 +823,8 @@ SSL_OptionGetDefault(PRInt32 which, PRBool *pOn)
 	return SECFailure;
     }
 
+    ssl_SetDefaultsFromEnvironment();
+
     switch (which) {
     case SSL_SOCKS:               on = PR_FALSE;                        break;
     case SSL_SECURITY:            on = ssl_defaults.useSecurity;        break;
@@ -868,6 +872,14 @@ SSL_EnableDefault(int which, PRBool on)
 SECStatus
 SSL_OptionSetDefault(PRInt32 which, PRBool on)
 {
+    SECStatus status = ssl_Init();
+
+    if (status != SECSuccess) {
+	return status;
+    }
+
+    ssl_SetDefaultsFromEnvironment();
+
     switch (which) {
       case SSL_SOCKS:
 	ssl_defaults.useSocks = PR_FALSE;
@@ -1038,7 +1050,11 @@ SSL_SetPolicy(long which, int policy)
 SECStatus
 SSL_CipherPolicySet(PRInt32 which, PRInt32 policy)
 {
-    SECStatus rv;
+    SECStatus rv = ssl_Init();
+
+    if (rv != SECSuccess) {
+	return rv;
+    }
 
     if (ssl_IsRemovedCipherSuite(which)) {
     	rv = SECSuccess;
@@ -1093,7 +1109,11 @@ SSL_EnableCipher(long which, PRBool enabled)
 SECStatus
 SSL_CipherPrefSetDefault(PRInt32 which, PRBool enabled)
 {
-    SECStatus rv;
+    SECStatus rv = ssl_Init();
+
+    if (rv != SECSuccess) {
+	return rv;
+    }
 
     if (ssl_IsRemovedCipherSuite(which))
     	return SECSuccess;
@@ -1234,6 +1254,11 @@ SSL_ImportFD(PRFileDesc *model, PRFileDesc *fd)
     sslSocket * ns = NULL;
     PRStatus    rv;
     PRNetAddr   addr;
+    SECStatus	status = ssl_Init();
+
+    if (status != SECSuccess) {
+	return NULL;
+    }
 
     if (model == NULL) {
 	/* Just create a default socket if we're given NULL for the model */
@@ -2174,7 +2199,9 @@ ssl_PushIOLayer(sslSocket *ns, PRFileDesc *stack, PRDescIdentity id)
     PRStatus    status;
 
     if (!ssl_inited) {
-	PR_CallOnce(&initIoLayerOnce, &ssl_InitIOLayer);
+	status = PR_CallOnce(&initIoLayerOnce, &ssl_InitIOLayer);
+	if (status != PR_SUCCESS)
+	    goto loser;
     }
 
     if (ns == NULL)
@@ -2250,13 +2277,9 @@ loser:
 
 #define LOWER(x) (x | 0x20)  /* cheap ToLower function ignores LOCALE */
 
-/*
-** Create a newsocket structure for a file descriptor.
-*/
-static sslSocket *
-ssl_NewSocket(PRBool makeLocks)
+static void
+ssl_SetDefaultsFromEnvironment(void)
 {
-    sslSocket *ss;
 #if defined( NSS_HAVE_GETENV )
     static int firsttime = 1;
 
@@ -2327,6 +2350,18 @@ ssl_NewSocket(PRBool makeLocks)
 	}
     }
 #endif /* NSS_HAVE_GETENV */
+}
+
+/*
+** Create a newsocket structure for a file descriptor.
+*/
+static sslSocket *
+ssl_NewSocket(PRBool makeLocks)
+{
+    sslSocket *ss;
+
+    ssl_SetDefaultsFromEnvironment();
+
     if (ssl_force_locks)
 	makeLocks = PR_TRUE;
 

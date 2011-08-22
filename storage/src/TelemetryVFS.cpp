@@ -37,9 +37,10 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include <string.h>
 #include "mozilla/Telemetry.h"
 #include "sqlite3.h"
-#include <string.h>
+#include "nsThreadUtils.h"
 
 namespace {
 
@@ -47,31 +48,58 @@ using namespace mozilla;
 
 struct Histograms {
   const char *name;
-  Telemetry::ID readB;
-  Telemetry::ID writeB;
-  Telemetry::ID syncMs;
+  const Telemetry::ID readB;
+  const Telemetry::ID writeB;
+  const Telemetry::ID readMS;
+  const Telemetry::ID writeMS;
+  const Telemetry::ID syncMS;
 };
 
+#define SQLITE_TELEMETRY(FILENAME, HGRAM) \
+  { FILENAME, \
+    Telemetry::MOZ_SQLITE_ ## HGRAM ## _READ_B, \
+    Telemetry::MOZ_SQLITE_ ## HGRAM ## _WRITE_B, \
+    Telemetry::MOZ_SQLITE_ ## HGRAM ## _READ_MS, \
+    Telemetry::MOZ_SQLITE_ ## HGRAM ## _WRITE_MS, \
+    Telemetry::MOZ_SQLITE_ ## HGRAM ## _SYNC_MS \
+  }
+
 Histograms gHistograms[] = {
-  {"places.sqlite",
-   Telemetry::MOZ_SQLITE_PLACES_READ_B,
-   Telemetry::MOZ_SQLITE_PLACES_WRITE_B,
-   Telemetry::MOZ_SQLITE_PLACES_SYNC },
+  SQLITE_TELEMETRY("places.sqlite", PLACES),
+  SQLITE_TELEMETRY("urlclassifier3.sqlite", URLCLASSIFIER),
+  SQLITE_TELEMETRY("cookies.sqlite", COOKIES),
+  SQLITE_TELEMETRY(NULL, OTHER)
+};
+#undef SQLITE_TELEMETRY
 
-  {"urlclassifier3.sqlite",
-   Telemetry::MOZ_SQLITE_URLCLASSIFIER_READ_B,
-   Telemetry::MOZ_SQLITE_URLCLASSIFIER_WRITE_B,
-   Telemetry::MOZ_SQLITE_URLCLASSIFIER_SYNC },
-  
-  {"cookies.sqlite",
-   Telemetry::MOZ_SQLITE_COOKIES_READ_B,
-   Telemetry::MOZ_SQLITE_COOKIES_WRITE_B,
-   Telemetry::MOZ_SQLITE_COOKIES_SYNC },
+/** RAII class for measuring how long io takes on/off main thread
+ */
+class IOThreadAutoTimer {
+public:
+  /** 
+   * IOThreadAutoTimer measures time spent in IO. Additionally it
+   * automatically determines whether IO is happening on the main
+   * thread and picks an appropriate histogram.
+   *
+   * @param id takes a telemetry histogram id. The id+1 must be an
+   * equivalent histogram for the main thread. Eg, MOZ_SQLITE_OPEN_MS 
+   * is followed by MOZ_SQLITE_OPEN_MAIN_THREAD_MS.
+   */
+  IOThreadAutoTimer(Telemetry::ID id)
+    : start(TimeStamp::Now()),
+      id(id)
+  {
+  }
 
-  {NULL,
-   Telemetry::MOZ_SQLITE_OTHER_READ_B,
-   Telemetry::MOZ_SQLITE_OTHER_WRITE_B,
-   Telemetry::MOZ_SQLITE_OTHER_SYNC }
+  ~IOThreadAutoTimer() {
+    PRUint32 mainThread = NS_IsMainThread() ? 1 : 0;
+    Telemetry::Accumulate(static_cast<Telemetry::ID>(id + mainThread),
+                          (TimeStamp::Now() - start).ToMilliseconds());
+  }
+
+private:
+  const TimeStamp start;
+  const Telemetry::ID id;
 };
 
 struct telemetry_file {
@@ -103,7 +131,7 @@ int
 xRead(sqlite3_file *pFile, void *zBuf, int iAmt, sqlite_int64 iOfst)
 {
   telemetry_file *p = (telemetry_file *)pFile;
-  Telemetry::AutoTimer<Telemetry::MOZ_SQLITE_READ_MS> timer;
+  IOThreadAutoTimer ioTimer(p->histograms->readMS);
   int rc;
   rc = p->pReal->pMethods->xRead(p->pReal, zBuf, iAmt, iOfst);
   // sqlite likes to read from empty files, this is normal, ignore it.
@@ -119,7 +147,7 @@ int
 xWrite(sqlite3_file *pFile, const void *zBuf, int iAmt, sqlite_int64 iOfst)
 {
   telemetry_file *p = (telemetry_file *)pFile;
-  Telemetry::AutoTimer<Telemetry::MOZ_SQLITE_WRITE_MS> timer;
+  IOThreadAutoTimer ioTimer(p->histograms->writeMS);
   int rc;
   rc = p->pReal->pMethods->xWrite(p->pReal, zBuf, iAmt, iOfst);
   Telemetry::Accumulate(p->histograms->writeB, rc == SQLITE_OK ? iAmt : 0);
@@ -132,9 +160,10 @@ xWrite(sqlite3_file *pFile, const void *zBuf, int iAmt, sqlite_int64 iOfst)
 int
 xTruncate(sqlite3_file *pFile, sqlite_int64 size)
 {
+  IOThreadAutoTimer ioTimer(Telemetry::MOZ_SQLITE_TRUNCATE_MS);
   telemetry_file *p = (telemetry_file *)pFile;
   int rc;
-  Telemetry::AutoTimer<Telemetry::MOZ_SQLITE_TRUNCATE> timer;
+  Telemetry::AutoTimer<Telemetry::MOZ_SQLITE_TRUNCATE_MS> timer;
   rc = p->pReal->pMethods->xTruncate(p->pReal, size);
   return rc;
 }
@@ -146,10 +175,8 @@ int
 xSync(sqlite3_file *pFile, int flags)
 {
   telemetry_file *p = (telemetry_file *)pFile;
-  const TimeStamp start = TimeStamp::Now();
-  int rc = p->pReal->pMethods->xSync(p->pReal, flags);
-  Telemetry::Accumulate(p->histograms->syncMs, static_cast<PRUint32>((TimeStamp::Now() - start).ToMilliseconds()));
-  return rc;
+  IOThreadAutoTimer ioTimer(p->histograms->syncMS);
+  return p->pReal->pMethods->xSync(p->pReal, flags);
 }
 
 /*
@@ -271,7 +298,8 @@ int
 xOpen(sqlite3_vfs* vfs, const char *zName, sqlite3_file* pFile,
           int flags, int *pOutFlags)
 {
-  Telemetry::AutoTimer<Telemetry::MOZ_SQLITE_OPEN> timer;
+  IOThreadAutoTimer ioTimer(Telemetry::MOZ_SQLITE_OPEN_MS);
+  Telemetry::AutoTimer<Telemetry::MOZ_SQLITE_OPEN_MS> timer;
   sqlite3_vfs *orig_vfs = static_cast<sqlite3_vfs*>(vfs->pAppData);
   int rc;
   telemetry_file *p = (telemetry_file *)pFile;

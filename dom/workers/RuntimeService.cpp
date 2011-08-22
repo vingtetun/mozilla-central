@@ -1,4 +1,5 @@
 /* -*- Mode: c++; c-basic-offset: 2; indent-tabs-mode: nil; tab-width: 40 -*- */
+/* vim: set ts=2 et sw=2 tw=80: */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -42,13 +43,16 @@
 #include "nsIDocument.h"
 #include "nsIEffectiveTLDService.h"
 #include "nsIObserverService.h"
+#include "nsIPlatformCharset.h"
 #include "nsIPrincipal.h"
 #include "nsIJSContextStack.h"
+#include "nsIMemoryReporter.h"
 #include "nsIScriptSecurityManager.h"
 #include "nsISupportsPriority.h"
 #include "nsITimer.h"
 #include "nsPIDOMWindow.h"
 
+#include "jsprf.h"
 #include "mozilla/Preferences.h"
 #include "nsContentUtils.h"
 #include "nsDOMJSUtils.h"
@@ -58,6 +62,7 @@
 #include "nsThreadUtils.h"
 #include "nsXPCOM.h"
 #include "nsXPCOMPrivate.h"
+#include "xpcpublic.h"
 
 #include "Events.h"
 #include "EventTarget.h"
@@ -69,12 +74,18 @@ USING_WORKERS_NAMESPACE
 using mozilla::MutexAutoLock;
 using mozilla::MutexAutoUnlock;
 using mozilla::Preferences;
+using namespace mozilla::xpconnect::memory;
 
 // The size of the worker runtime heaps in bytes.
 #define WORKER_RUNTIME_HEAPSIZE 32 * 1024 * 1024
 
-// The size of the C stack in bytes.
-#define WORKER_CONTEXT_NATIVE_STACK_LIMIT sizeof(size_t) * 32 * 1024
+// The C stack size. We use the same stack size on all platforms for
+// consistency.
+#define WORKER_STACK_SIZE 256 * sizeof(size_t) * 1024
+
+// The stack limit the JS engine will check. Half the size of the
+// actual C stack, to be safe.
+#define WORKER_CONTEXT_NATIVE_STACK_LIMIT 128 * sizeof(size_t) * 1024
 
 // The maximum number of threads to use for workers, overridable via pref.
 #define MAX_WORKERS_PER_DOMAIN 10
@@ -239,15 +250,6 @@ CreateJSContextForWorker(WorkerPrivate* aWorkerPrivate)
     return nsnull;
   }
 
-  // ChromeWorker has extra clone callbacks for passing threadsafe XPCOM
-  // components.
-  JSStructuredCloneCallbacks* callbacks =
-    aWorkerPrivate->IsChromeWorker() ?
-    ChromeWorkerStructuredCloneCallbacks() :
-    WorkerStructuredCloneCallbacks();
-
-  JS_SetStructuredCloneCallbacks(runtime, callbacks);
-
   JSContext* workerCx = JS_NewContext(runtime, 0);
   if (!workerCx) {
     JS_DestroyRuntime(runtime);
@@ -285,6 +287,61 @@ CreateJSContextForWorker(WorkerPrivate* aWorkerPrivate)
   return workerCx;
 }
 
+class WorkerMemoryReporter : public nsIMemoryMultiReporter
+{
+  WorkerPrivate* mWorkerPrivate;
+  nsCString mPathPrefix;
+
+public:
+  NS_DECL_ISUPPORTS
+
+  WorkerMemoryReporter(WorkerPrivate* aWorkerPrivate)
+  : mWorkerPrivate(aWorkerPrivate)
+  {
+    aWorkerPrivate->AssertIsOnWorkerThread();
+
+    nsCString escapedDomain(aWorkerPrivate->Domain());
+    escapedDomain.ReplaceChar('/', '\\');
+
+    NS_ConvertUTF16toUTF8 escapedURL(aWorkerPrivate->ScriptURL());
+    escapedURL.ReplaceChar('/', '\\');
+
+    // 64bit address plus '0x' plus null terminator.
+    char address[21];
+    JSUint32 addressSize =
+      JS_snprintf(address, sizeof(address), "0x%llx", aWorkerPrivate);
+    if (addressSize == JSUint32(-1)) {
+      NS_WARNING("JS_snprintf failed!");
+      address[0] = '\0';
+      addressSize = 0;
+    }
+
+    mPathPrefix = NS_LITERAL_CSTRING("explicit/dom/workers(") +
+                  escapedDomain + NS_LITERAL_CSTRING(")/worker(") +
+                  escapedURL + NS_LITERAL_CSTRING(", ") +
+                  nsDependentCString(address, addressSize) +
+                  NS_LITERAL_CSTRING(")/");
+  }
+
+  NS_IMETHOD
+  CollectReports(nsIMemoryMultiReporterCallback* aCallback,
+                 nsISupports* aClosure)
+  {
+    AssertIsOnMainThread();
+
+    IterateData data;
+    if (!mWorkerPrivate->BlockAndCollectRuntimeStats(&data)) {
+      return NS_ERROR_FAILURE;
+    }
+
+    ReportJSRuntimeStats(data, mPathPrefix, aCallback, aClosure);
+
+    return NS_OK;
+  }
+};
+
+NS_IMPL_THREADSAFE_ISUPPORTS1(WorkerMemoryReporter, nsIMemoryMultiReporter)
+
 class WorkerThreadRunnable : public nsRunnable
 {
   WorkerPrivate* mWorkerPrivate;
@@ -311,9 +368,23 @@ public:
       return NS_ERROR_FAILURE;
     }
 
+    nsRefPtr<WorkerMemoryReporter> reporter =
+      new WorkerMemoryReporter(workerPrivate);
+    if (NS_FAILED(NS_RegisterMemoryMultiReporter(reporter))) {
+      NS_WARNING("Failed to register memory reporter!");
+      reporter = nsnull;
+    }
+
     {
       JSAutoRequest ar(cx);
       workerPrivate->DoRunLoop(cx);
+    }
+
+    if (reporter) {
+      if (NS_FAILED(NS_UnregisterMemoryMultiReporter(reporter))) {
+        NS_WARNING("Failed to unregister memory reporter!");
+      }
+      reporter = nsnull;
     }
 
     JSRuntime* rt = JS_GetRuntime(cx);
@@ -725,7 +796,8 @@ RuntimeService::ScheduleWorker(JSContext* aCx, WorkerPrivate* aWorkerPrivate)
   }
 
   if (!thread) {
-    if (NS_FAILED(NS_NewThread(getter_AddRefs(thread), nsnull))) {
+    if (NS_FAILED(NS_NewThread(getter_AddRefs(thread), nsnull,
+                               WORKER_STACK_SIZE))) {
       UnregisterWorker(aCx, aWorkerPrivate);
       JS_ReportError(aCx, "Could not create new thread!");
       return false;
@@ -856,6 +928,15 @@ RuntimeService::Init()
   PRInt32 maxPerDomain = Preferences::GetInt(PREF_WORKERS_MAX_PER_DOMAIN,
                                              MAX_WORKERS_PER_DOMAIN);
   gMaxWorkersPerDomain = NS_MAX(0, maxPerDomain);
+
+  mDetectorName = Preferences::GetLocalizedCString("intl.charset.detector");
+
+  nsCOMPtr<nsIPlatformCharset> platformCharset =
+    do_GetService(NS_PLATFORMCHARSET_CONTRACTID, &rv);
+  if (NS_SUCCEEDED(rv)) {
+    rv = platformCharset->GetCharset(kPlatformCharsetSel_PlainTextInFile,
+                                     mSystemCharset);
+  }
 
   return NS_OK;
 }

@@ -97,7 +97,7 @@ NS_MEMORY_REPORTER_IMPLEMENT(WebGLBufferMemoryUsed,
                              "Memory used by WebGL buffers. The OpenGL implementation is free to store these buffers in either video memory or main memory. This measurement is only a lower bound, actual memory usage may be higher for example if the storage is strided.")
 
 NS_MEMORY_REPORTER_IMPLEMENT(WebGLBufferCacheMemoryUsed,
-                             "webgl-buffer-cache-memory",
+                             "explicit/webgl/buffer-cache-memory",
                              KIND_HEAP,
                              UNITS_BYTES,
                              WebGLMemoryReporter::GetBufferCacheMemoryUsed,
@@ -125,14 +125,14 @@ NS_MEMORY_REPORTER_IMPLEMENT(WebGLRenderbufferCount,
                              "Number of WebGL renderbuffers.")
 
 NS_MEMORY_REPORTER_IMPLEMENT(WebGLShaderSourcesSize,
-                             "webgl-shader-sources-size",
+                             "explicit/webgl/shader-sources-size",
                              KIND_HEAP,
                              UNITS_BYTES,
                              WebGLMemoryReporter::GetShaderSourcesSize,
                              "Combined size of WebGL shader ASCII sources, cached on the heap. This should always be at most a few kilobytes, or dozen kilobytes for very shader-intensive WebGL demos.")
 
 NS_MEMORY_REPORTER_IMPLEMENT(WebGLShaderTranslationLogsSize,
-                             "webgl-shader-translationlogs-size",
+                             "explicit/webgl/shader-translationlogs-size",
                              KIND_HEAP,
                              UNITS_BYTES,
                              WebGLMemoryReporter::GetShaderTranslationLogsSize,
@@ -937,6 +937,16 @@ WebGLContext::MozGetUnderlyingParamString(PRUint32 pname, nsAString& retval)
     return NS_OK;
 }
 
+bool WebGLContext::IsExtensionSupported(WebGLExtensionID ei)
+{
+    if (ei == WebGL_OES_texture_float) {
+        MakeContextCurrent();
+        return gl->IsExtensionSupported(gl->IsGLES2() ? GLContext::OES_texture_float
+                                                      : GLContext::ARB_texture_float);
+    }
+    return false;
+}
+
 NS_IMETHODIMP
 WebGLContext::GetExtension(const nsAString& aName, nsIWebGLExtension **retval)
 {
@@ -945,10 +955,7 @@ WebGLContext::GetExtension(const nsAString& aName, nsIWebGLExtension **retval)
     // handle simple extensions that don't need custom objects first
     WebGLExtensionID ei = WebGLExtensionID_Max;
     if (aName.EqualsLiteral("OES_texture_float")) {
-        MakeContextCurrent();
-
-        PRBool avail = gl->IsExtensionSupported(gl->IsGLES2() ? "GL_OES_texture_float" : "GL_ARB_texture_float");
-        if (avail)
+        if (IsExtensionSupported(WebGL_OES_texture_float))
             ei = WebGL_OES_texture_float;
     }
 
@@ -1245,7 +1252,8 @@ WebGLContext::GetSupportedExtensions(nsIVariant **retval)
 
     nsTArray<const char *> extList;
 
-    /* no extensions to add to extList */
+    if (IsExtensionSupported(WebGL_OES_texture_float))
+        extList.InsertElementAt(extList.Length(), "OES_texture_float");
 
     nsresult rv;
     if (extList.Length() > 0) {

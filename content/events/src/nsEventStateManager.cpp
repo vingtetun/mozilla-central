@@ -1508,6 +1508,35 @@ nsEventStateManager::ExecuteAccessKey(nsTArray<PRUint32>& aAccessCharCodes,
   return PR_FALSE;
 }
 
+PRBool
+nsEventStateManager::GetAccessKeyLabelPrefix(nsAString& aPrefix)
+{
+  aPrefix.Truncate();
+  nsAutoString separator, modifierText;
+  nsContentUtils::GetModifierSeparatorText(separator);
+
+  nsCOMPtr<nsISupports> container = mPresContext->GetContainer();
+  PRInt32 modifier = GetAccessModifierMask(container);
+
+  if (modifier & NS_MODIFIER_CONTROL) {
+    nsContentUtils::GetControlText(modifierText);
+    aPrefix.Append(modifierText + separator);
+  }
+  if (modifier & NS_MODIFIER_META) {
+    nsContentUtils::GetMetaText(modifierText);
+    aPrefix.Append(modifierText + separator);
+  }
+  if (modifier & NS_MODIFIER_ALT) {
+    nsContentUtils::GetAltText(modifierText);
+    aPrefix.Append(modifierText + separator);
+  }
+  if (modifier & NS_MODIFIER_SHIFT) {
+    nsContentUtils::GetShiftText(modifierText);
+    aPrefix.Append(modifierText + separator);
+  }
+  return !aPrefix.IsEmpty();
+}
+
 void
 nsEventStateManager::HandleAccessKey(nsPresContext* aPresContext,
                                      nsKeyEvent *aEvent,
@@ -2508,9 +2537,8 @@ GetScrollableLineHeight(nsIFrame* aTargetFrame)
   }
 
   // Fall back to the font height of the target frame.
-  const nsStyleFont* font = aTargetFrame->GetStyleFont();
-  const nsFont& f = font->mFont;
-  nsRefPtr<nsFontMetrics> fm = aTargetFrame->PresContext()->GetMetricsFor(f);
+  nsRefPtr<nsFontMetrics> fm;
+  nsLayoutUtils::GetFontMetricsForFrame(aTargetFrame, getter_AddRefs(fm));
   NS_ASSERTION(fm, "FontMetrics is null!");
   if (fm)
     return fm->MaxHeight();
@@ -2642,14 +2670,15 @@ nsEventStateManager::ComputeWheelActionFor(nsMouseScrollEvent* aMouseEvent,
       // Do not scroll pixels when zooming
       action = -1;
     }
-  } else if (aMouseEvent->scrollFlags & nsMouseScrollEvent::kHasPixels) {
-    if (aUseSystemSettings ||
-        action == MOUSE_SCROLL_N_LINES || action == MOUSE_SCROLL_PAGE ||
-        (aMouseEvent->scrollFlags & nsMouseScrollEvent::kIsMomentum)) {
-      // Don't scroll lines when a pixel scroll event will follow.
-      // Also, don't do history scrolling or zooming for momentum scrolls.
-      action = -1;
-    }
+  } else if (((aMouseEvent->scrollFlags & nsMouseScrollEvent::kHasPixels) &&
+              (aUseSystemSettings ||
+               action == MOUSE_SCROLL_N_LINES || action == MOUSE_SCROLL_PAGE)) ||
+             ((aMouseEvent->scrollFlags & nsMouseScrollEvent::kIsMomentum) &&
+              (action == MOUSE_SCROLL_HISTORY || action == MOUSE_SCROLL_ZOOM))) {
+    // Don't scroll lines or page when a pixel scroll event will follow.
+    // Also, don't do history scrolling or zooming for momentum scrolls,
+    // no matter what's going on with pixel scrolling.
+    action = -1;
   }
 
   return action;

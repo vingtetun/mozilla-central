@@ -7,8 +7,6 @@
         href="chrome://mochikit/content/tests/SimpleTest/test.css" />
 
   <script type="application/javascript"
-          src="chrome://mochikit/content/MochiKit/packed.js"></script>
-  <script type="application/javascript"
           src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
 
   <script type="application/javascript"
@@ -376,12 +374,12 @@
           { INTERNAL_FRAME: [
             { DOCUMENT: [
               { ENTRY: [ ] }
-            ] };
+            ] }
           ] };
         testAccessibleTree(this.containerNode, tree);
       }
 
-      this.getID() = function changeSrc_getID()
+      this.getID = function changeSrc_getID()
       {
         return "change src on iframe";
       }

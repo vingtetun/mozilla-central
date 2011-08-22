@@ -388,7 +388,8 @@ StackSpace::ensureEnoughSpaceToEnterTrace(JSContext *cx)
 
 STATIC_POSTCONDITION(!return || ubound(from) >= nvals)
 JS_ALWAYS_INLINE bool
-StackSpace::ensureSpace(JSContext *cx, MaybeReportError report, Value *from, ptrdiff_t nvals) const
+StackSpace::ensureSpace(JSContext *cx, MaybeReportError report, Value *from, ptrdiff_t nvals,
+                        JSCompartment *dest) const
 {
     assertInvariants();
     JS_ASSERT(from >= firstUnused());
@@ -396,7 +397,7 @@ StackSpace::ensureSpace(JSContext *cx, MaybeReportError report, Value *from, ptr
     JS_ASSERT(from <= commitEnd_);
 #endif
     if (JS_UNLIKELY(conservativeEnd_ - from < nvals))
-        return ensureSpaceSlow(cx, report, from, nvals);
+        return ensureSpaceSlow(cx, report, from, nvals, dest);
     return true;
 }
 
@@ -600,9 +601,10 @@ ArgumentsObject::getElements(uint32 start, uint32 count, Value *vp)
 
     /* If there's no stack frame for this, argument values are in elements(). */
     if (!fp) {
-        Value *srcbeg = elements() + start;
-        Value *srcend = srcbeg + count;
-        for (Value *dst = vp, *src = srcbeg; src < srcend; ++dst, ++src) {
+        const Value *srcbeg = elements() + start;
+        const Value *srcend = srcbeg + count;
+        const Value *src = srcbeg;
+        for (Value *dst = vp; src < srcend; ++dst, ++src) {
             if (src->isMagic(JS_ARGS_HOLE))
                 return false;
             *dst = *src;

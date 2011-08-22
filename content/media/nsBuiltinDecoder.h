@@ -316,7 +316,7 @@ public:
   // Returns PR_TRUE if the media resource can seek into unbuffered ranges,
   // as set by SetSeekable(). The decoder monitor must be obtained before
   // calling this.
-  virtual PRBool GetSeekable() = 0;
+  virtual PRBool IsSeekable() = 0;
 
   // Update the playback position. This can result in a timeupdate event
   // and an invalidate of the frame being dispatched asynchronously if
@@ -326,6 +326,9 @@ public:
   virtual void UpdatePlaybackPosition(PRInt64 aTime) = 0;
 
   virtual nsresult GetBuffered(nsTimeRanges* aBuffered) = 0;
+
+  virtual PRInt64 VideoQueueMemoryInUse() = 0;
+  virtual PRInt64 AudioQueueMemoryInUse() = 0;
 
   virtual void NotifyDataArrived(const char* aBuffer, PRUint32 aLength, PRUint32 aOffset) = 0;
 
@@ -392,6 +395,9 @@ class nsBuiltinDecoder : public nsMediaDecoder
   virtual void SetVolume(double aVolume);
   virtual double GetDuration();
 
+  virtual void SetInfinite(PRBool aInfinite);
+  virtual PRBool IsInfinite();
+
   virtual nsMediaStream* GetCurrentStream();
   virtual already_AddRefed<nsIPrincipal> GetCurrentPrincipal();
 
@@ -427,7 +433,9 @@ class nsBuiltinDecoder : public nsMediaDecoder
   virtual void SetSeekable(PRBool aSeekable);
 
   // Return PR_TRUE if seeking is supported.
-  virtual PRBool GetSeekable();
+  virtual PRBool IsSeekable();
+
+  virtual nsresult GetSeekable(nsTimeRanges* aSeekable);
 
   virtual Statistics GetStatistics();
 
@@ -469,6 +477,20 @@ class nsBuiltinDecoder : public nsMediaDecoder
       return mDecoderStateMachine->GetBuffered(aBuffered);
     }
     return NS_ERROR_FAILURE;
+  }
+
+  virtual PRInt64 VideoQueueMemoryInUse() {
+    if (mDecoderStateMachine) {
+      return mDecoderStateMachine->VideoQueueMemoryInUse();
+    }
+    return 0;
+  }
+
+  virtual PRInt64 AudioQueueMemoryInUse() {
+    if (mDecoderStateMachine) {
+      return mDecoderStateMachine->AudioQueueMemoryInUse();
+    }
+    return 0;
   }
 
   virtual void NotifyDataArrived(const char* aBuffer, PRUint32 aLength, PRUint32 aOffset) {
@@ -671,6 +693,9 @@ public:
   // from jumping around. Read/Write from any thread. Must have decode monitor
   // locked before accessing.
   PRPackedBool mIgnoreProgressData;
+
+  // PR_TRUE if the stream is infinite (e.g. a webradio).
+  PRPackedBool mInfiniteStream;
 };
 
 #endif

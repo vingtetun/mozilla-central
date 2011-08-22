@@ -50,6 +50,7 @@
 #include "assembler/assembler/MacroAssemblerCodeRef.h"
 #include "jsiter.h"
 #include "jstypes.h"
+#include "vm/Debugger.h"
 #include "vm/String.h"
 #include "methodjit/Compiler.h"
 #include "methodjit/StubCalls.h"
@@ -444,7 +445,7 @@ stubs::GetElem(VMFrame &f)
 
             if (idx < obj->getArrayLength() &&
                 idx < obj->getDenseArrayCapacity()) {
-                copyFrom = obj->addressOfDenseArrayElement(idx);
+                copyFrom = &obj->getDenseArrayElement(idx);
                 if (!copyFrom->isMagic())
                     goto end_getelem;
             }
@@ -453,7 +454,7 @@ stubs::GetElem(VMFrame &f)
             ArgumentsObject *argsobj = obj->asArguments();
 
             if (arg < argsobj->initialLength()) {
-                copyFrom = argsobj->addressOfElement(arg);
+                copyFrom = &argsobj->element(arg);
                 if (!copyFrom->isMagic()) {
                     if (StackFrame *afp = (StackFrame *) argsobj->getPrivate())
                         copyFrom = &afp->canonicalActualArg(arg);
@@ -703,9 +704,9 @@ stubs::DefFun(VMFrame &f, JSFunction *fun)
      * a compound statement (not at the top statement level of global code, or
      * at the top level of a function body).
      */
-    JSObject *obj = FUN_OBJECT(fun);
+    JSObject *obj = fun;
 
-    if (FUN_NULL_CLOSURE(fun)) {
+    if (fun->isNullClosure()) {
         /*
          * Even a null closure needs a parent for principals finding.
          * FIXME: bug 476950, although debugger users may also demand some kind
@@ -816,7 +817,7 @@ template void JS_FASTCALL stubs::DefFun<false>(VMFrame &f, JSFunction *fun);
             THROWV(JS_FALSE);                                                 \
         if (lval.isString() && rval.isString()) {                             \
             JSString *l = lval.toString(), *r = rval.toString();              \
-            JSBool cmp;                                                       \
+            int32 cmp;                                                        \
             if (!CompareStrings(cx, l, r, &cmp))                              \
                 THROWV(JS_FALSE);                                             \
             cond = cmp OP 0;                                                  \
@@ -1130,13 +1131,20 @@ stubs::Mod(VMFrame &f)
 }
 
 void JS_FASTCALL
-stubs::Debugger(VMFrame &f, jsbytecode *pc)
+stubs::DebuggerStatement(VMFrame &f, jsbytecode *pc)
 {
     JSDebuggerHandler handler = f.cx->debugHooks->debuggerHandler;
-    if (handler) {
+    if (handler || !f.cx->compartment->getDebuggees().empty()) {
+        JSTrapStatus st = JSTRAP_CONTINUE;
         Value rval;
-        switch (handler(f.cx, f.cx->fp()->script(), pc, Jsvalify(&rval),
-                        f.cx->debugHooks->debuggerHandlerData)) {
+        if (handler) {
+            st = handler(f.cx, f.cx->fp()->script(), pc, Jsvalify(&rval),
+                         f.cx->debugHooks->debuggerHandlerData);
+        }
+        if (st == JSTRAP_CONTINUE)
+            st = Debugger::onDebuggerStatement(f.cx, &rval);
+
+        switch (st) {
           case JSTRAP_THROW:
             f.cx->setPendingException(rval);
             THROW();
@@ -1188,7 +1196,7 @@ stubs::Trap(VMFrame &f, uint32 trapTypes)
     }
 
     if (result == JSTRAP_CONTINUE && (trapTypes & JSTRAP_TRAP))
-        result = JS_HandleTrap(f.cx, f.cx->fp()->script(), pc, Jsvalify(&rval));
+        result = Debugger::onTrap(f.cx, &rval);
 
     switch (result) {
       case JSTRAP_THROW:
@@ -1317,10 +1325,10 @@ stubs::DefLocalFun(VMFrame &f, JSFunction *fun)
      * activation.
      */
     JS_ASSERT(fun->isInterpreted());
-    JS_ASSERT(!FUN_FLAT_CLOSURE(fun));
-    JSObject *obj = FUN_OBJECT(fun);
+    JS_ASSERT(!fun->isFlatClosure());
+    JSObject *obj = fun;
 
-    if (FUN_NULL_CLOSURE(fun)) {
+    if (fun->isNullClosure()) {
         obj = CloneFunctionObject(f.cx, fun, &f.fp()->scopeChain());
         if (!obj)
             THROWV(NULL);
@@ -1373,8 +1381,8 @@ stubs::RegExp(VMFrame &f, JSObject *regex)
 JSObject * JS_FASTCALL
 stubs::LambdaForInit(VMFrame &f, JSFunction *fun)
 {
-    JSObject *obj = FUN_OBJECT(fun);
-    if (FUN_NULL_CLOSURE(fun) && obj->getParent() == &f.fp()->scopeChain()) {
+    JSObject *obj = fun;
+    if (fun->isNullClosure() && obj->getParent() == &f.fp()->scopeChain()) {
         fun->setMethodAtom(f.fp()->script()->getAtom(GET_SLOTNO(f.regs.pc)));
         return obj;
     }
@@ -1384,8 +1392,8 @@ stubs::LambdaForInit(VMFrame &f, JSFunction *fun)
 JSObject * JS_FASTCALL
 stubs::LambdaForSet(VMFrame &f, JSFunction *fun)
 {
-    JSObject *obj = FUN_OBJECT(fun);
-    if (FUN_NULL_CLOSURE(fun) && obj->getParent() == &f.fp()->scopeChain()) {
+    JSObject *obj = fun;
+    if (fun->isNullClosure() && obj->getParent() == &f.fp()->scopeChain()) {
         const Value &lref = f.regs.sp[-1];
         if (lref.isObject() && lref.toObject().canHaveMethodBarrier()) {
             fun->setMethodAtom(f.fp()->script()->getAtom(GET_SLOTNO(f.regs.pc)));
@@ -1398,8 +1406,8 @@ stubs::LambdaForSet(VMFrame &f, JSFunction *fun)
 JSObject * JS_FASTCALL
 stubs::LambdaJoinableForCall(VMFrame &f, JSFunction *fun)
 {
-    JSObject *obj = FUN_OBJECT(fun);
-    if (FUN_NULL_CLOSURE(fun) && obj->getParent() == &f.fp()->scopeChain()) {
+    JSObject *obj = fun;
+    if (fun->isNullClosure() && obj->getParent() == &f.fp()->scopeChain()) {
         /*
          * Array.prototype.sort and String.prototype.replace are
          * optimized as if they are special form. We know that they
@@ -1435,8 +1443,8 @@ stubs::LambdaJoinableForCall(VMFrame &f, JSFunction *fun)
 JSObject * JS_FASTCALL
 stubs::LambdaJoinableForNull(VMFrame &f, JSFunction *fun)
 {
-    JSObject *obj = FUN_OBJECT(fun);
-    if (FUN_NULL_CLOSURE(fun) && obj->getParent() == &f.fp()->scopeChain()) {
+    JSObject *obj = fun;
+    if (fun->isNullClosure() && obj->getParent() == &f.fp()->scopeChain()) {
         jsbytecode *pc2 = f.regs.pc + JSOP_NULL_LENGTH;
         JSOp op2 = JSOp(*pc2);
 
@@ -1449,10 +1457,10 @@ stubs::LambdaJoinableForNull(VMFrame &f, JSFunction *fun)
 JSObject * JS_FASTCALL
 stubs::Lambda(VMFrame &f, JSFunction *fun)
 {
-    JSObject *obj = FUN_OBJECT(fun);
+    JSObject *obj = fun;
 
     JSObject *parent;
-    if (FUN_NULL_CLOSURE(fun)) {
+    if (fun->isNullClosure()) {
         parent = &f.fp()->scopeChain();
     } else {
         parent = GetScopeChainFast(f.cx, f.fp(), JSOP_LAMBDA, JSOP_LAMBDA_LENGTH);
@@ -1546,13 +1554,13 @@ NameIncDec(VMFrame &f, JSObject *obj, JSAtom *origAtom)
     if (!atom) {
         if (obj == obj2 && entry->vword.isSlot()) {
             uint32 slot = entry->vword.toSlot();
-            Value &rref = obj->nativeGetSlotRef(slot);
+            const Value &rval = obj->nativeGetSlot(slot);
             int32_t tmp;
-            if (JS_LIKELY(rref.isInt32() && CanIncDecWithoutOverflow(tmp = rref.toInt32()))) {
+            if (JS_LIKELY(rval.isInt32() && CanIncDecWithoutOverflow(tmp = rval.toInt32()))) {
                 int32_t inc = tmp + N;
                 if (!POST)
                     tmp = inc;
-                rref.getInt32Ref() = inc;
+                obj->nativeSetSlot(slot, Int32Value(inc));
                 f.regs.sp[0].setInt32(tmp);
                 return true;
             }

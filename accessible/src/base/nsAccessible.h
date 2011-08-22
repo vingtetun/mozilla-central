@@ -40,7 +40,7 @@
 #define _nsAccessible_H_
 
 #include "nsAccessNodeWrap.h"
-#include "States.h"
+#include "mozilla/a11y/States.h"
 
 #include "nsIAccessible.h"
 #include "nsIAccessibleHyperLink.h"
@@ -62,6 +62,7 @@ class nsAccessible;
 class nsHyperTextAccessible;
 class nsHTMLLIAccessible;
 struct nsRoleMapEntry;
+class Relation;
 class nsTextAccessible;
 
 struct nsRect;
@@ -218,6 +219,11 @@ public:
                                      EWhichChildAtPoint aWhichChild);
 
   /**
+   * Return the focused child if any.
+   */
+  virtual nsAccessible* FocusedChild();
+
+  /**
    * Return calculated group level based on accessible hierarchy.
    */
   virtual PRInt32 GetLevelInternal();
@@ -231,6 +237,11 @@ public:
    */
   virtual void GetPositionAndSizeInternal(PRInt32 *aPosInSet,
                                           PRInt32 *aSetSize);
+
+  /**
+   * Get the relation of the given type.
+   */
+  virtual Relation RelationByType(PRUint32 aType);
 
   //////////////////////////////////////////////////////////////////////////////
   // Initializing methods
@@ -279,7 +290,7 @@ public:
   /**
    * Return parent accessible.
    */
-  nsAccessible* GetParent() const { return mParent; }
+  nsAccessible* Parent() const { return mParent; }
 
   /**
    * Return child accessible at the given index.
@@ -307,12 +318,20 @@ public:
   PRBool HasChildren() { return !!GetChildAt(0); }
 
   /**
-   * Return next/previous sibling of the accessible.
+   * Return first/last/next/previous sibling of the accessible.
    */
   inline nsAccessible* NextSibling() const
     {  return GetSiblingAtOffset(1); }
   inline nsAccessible* PrevSibling() const
     { return GetSiblingAtOffset(-1); }
+  inline nsAccessible* FirstChild()
+    { return GetChildCount() != 0 ? GetChildAt(0) : nsnull; }
+  inline nsAccessible* LastChild()
+  {
+    PRUint32 childCount = GetChildCount();
+    return childCount != 0 ? GetChildAt(childCount - 1) : nsnull;
+  }
+
 
   /**
    * Return embedded accessible children count.
@@ -406,6 +425,11 @@ public:
   // ActionAccessible
 
   /**
+   * Return the number of actions that can be performed on this accessible.
+   */
+  virtual PRUint8 ActionCount();
+
+  /**
    * Return access key, such as Alt+D.
    */
   virtual KeyBinding AccessKey() const;
@@ -445,7 +469,7 @@ public:
     // Perhaps we can get information about invalid links from the cache
     // In the mean time authors can use role="link" aria-invalid="true"
     // to force it for links they internally know to be invalid
-    return (0 == (State() & states::INVALID));
+    return (0 == (State() & mozilla::a11y::states::INVALID));
   }
 
   /**
@@ -649,7 +673,7 @@ protected:
    *  Get the container node for an atomic region, defined by aria-atomic="true"
    *  @return the container node
    */
-  nsIDOMNode* GetAtomicRegion();
+  nsIContent* GetAtomicRegion() const;
 
   /**
    * Get numeric value of the given ARIA attribute.
@@ -663,7 +687,7 @@ protected:
 
   /**
    * Return the action rule based on ARIA enum constants EActionRule
-   * (see nsARIAMap.h). Used by GetNumActions() and GetActionName().
+   * (see nsARIAMap.h). Used by ActionCount() and GetActionName().
    *
    * @param aStates  [in] states of the accessible
    */

@@ -7,7 +7,7 @@ function test() {
   registerCleanupFunction(function() {
     while (gBrowser.tabs[1])
       gBrowser.removeTab(gBrowser.tabs[1]);
-    hideTabView(function() {});
+    hideTabView();
   });
   showTabView(onTabViewWindowLoaded);
 }
@@ -20,12 +20,12 @@ function onTabViewWindowLoaded() {
   registerCleanupFunction(function() {
     let groupItem = contentWindow.GroupItems.groupItem(groupItemId);
     if (groupItem)
-      closeGroupItem(groupItem, function() {});
+      closeGroupItem(groupItem);
   });
 
   // create a group item
   let groupItem = createGroupItemWithBlankTabs(window, 300, 300, 400, 1);
-  groupItemId = groupItem.id;
+  let groupItemId = groupItem.id;
   is(groupItem.getChildren().length, 1, "The new group has a tab item");
   // start the tests
   waitForFocus(function() {

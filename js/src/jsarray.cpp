@@ -120,63 +120,11 @@
 using namespace js;
 using namespace js::gc;
 
-/* 2^32 - 1 as a number and a string */
-#define MAXINDEX 4294967295u
-#define MAXSTR   "4294967295"
-
 static inline bool
 ENSURE_SLOW_ARRAY(JSContext *cx, JSObject *obj)
 {
     return obj->getClass() == &js_SlowArrayClass ||
            obj->makeDenseArraySlow(cx);
-}
-
-/*
- * Determine if the id represents an array index or an XML property index.
- *
- * An id is an array index according to ECMA by (15.4):
- *
- * "Array objects give special treatment to a certain class of property names.
- * A property name P (in the form of a string value) is an array index if and
- * only if ToString(ToUint32(P)) is equal to P and ToUint32(P) is not equal
- * to 2^32-1."
- *
- * In our implementation, it would be sufficient to check for JSVAL_IS_INT(id)
- * except that by using signed 31-bit integers we miss the top half of the
- * valid range. This function checks the string representation itself; note
- * that calling a standard conversion routine might allow strings such as
- * "08" or "4.0" as array indices, which they are not.
- *
- * 'id' is passed as a jsboxedword since the given id need not necessarily hold
- * an atomized string.
- */
-bool
-js_StringIsIndex(JSLinearString *str, jsuint *indexp)
-{
-    const jschar *cp = str->chars();
-    if (JS7_ISDEC(*cp) && str->length() < sizeof(MAXSTR)) {
-        jsuint index = JS7_UNDEC(*cp++);
-        jsuint oldIndex = 0;
-        jsuint c = 0;
-        if (index != 0) {
-            while (JS7_ISDEC(*cp)) {
-                oldIndex = index;
-                c = JS7_UNDEC(*cp);
-                index = 10*index + c;
-                cp++;
-            }
-        }
-
-        /* Ensure that all characters were consumed and we didn't overflow. */
-        if (*cp == 0 &&
-             (oldIndex < (MAXINDEX / 10) ||
-              (oldIndex == (MAXINDEX / 10) && c < (MAXINDEX % 10))))
-        {
-            *indexp = index;
-            return true;
-        }
-    }
-    return false;
 }
 
 JSBool
@@ -206,6 +154,66 @@ js_GetLengthProperty(JSContext *cx, JSObject *obj, jsuint *lengthp)
 
     JS_STATIC_ASSERT(sizeof(jsuint) == sizeof(uint32_t));
     return ValueToECMAUint32(cx, tvr.value(), (uint32_t *)lengthp);
+}
+
+namespace js {
+
+/*
+ * Determine if the id represents an array index or an XML property index.
+ *
+ * An id is an array index according to ECMA by (15.4):
+ *
+ * "Array objects give special treatment to a certain class of property names.
+ * A property name P (in the form of a string value) is an array index if and
+ * only if ToString(ToUint32(P)) is equal to P and ToUint32(P) is not equal
+ * to 2^32-1."
+ *
+ * This means the largest allowed index is actually 2^32-2 (4294967294).  
+ * 
+ * In our implementation, it would be sufficient to check for JSVAL_IS_INT(id)
+ * except that by using signed 31-bit integers we miss the top half of the
+ * valid range. This function checks the string representation itself; note
+ * that calling a standard conversion routine might allow strings such as
+ * "08" or "4.0" as array indices, which they are not.
+ *
+ */
+bool
+StringIsArrayIndex(JSLinearString *str, jsuint *indexp)
+{
+    const jschar *s = str->chars();
+    uint32 length = str->length();
+    const jschar *end = s + length;
+
+    if (length == 0 || length > (sizeof("4294967294") - 1) || !JS7_ISDEC(*s))
+        return false;
+
+    uint32 c = 0, previous = 0;    
+    uint32 index = JS7_UNDEC(*s++);
+
+    /* Don't allow leading zeros. */
+    if (index == 0 && s != end)
+        return false;
+
+    for (; s < end; s++) {
+        if (!JS7_ISDEC(*s))
+            return false;
+
+        previous = index;
+        c = JS7_UNDEC(*s);
+        index = 10 * index + c;
+    }
+
+    /* Make sure we didn't overflow. */
+    if (previous < (MAX_ARRAY_INDEX / 10) || (previous == (MAX_ARRAY_INDEX / 10) && 
+        c <= (MAX_ARRAY_INDEX % 10))) {
+        JS_ASSERT(index <= MAX_ARRAY_INDEX);
+        *indexp = index;
+        return true;
+    }
+    
+    return false;
+}
+
 }
 
 static JSBool
@@ -273,7 +281,7 @@ JSObject::willBeSparseDenseArray(uintN requiredCapacity, uintN newElementsHint)
     if (minimalDenseCount > cap)
         return true;
 
-    Value *elems = getDenseArrayElements();
+    const Value *elems = getDenseArrayElements();
     for (uintN i = 0; i < cap; i++) {
         if (!elems[i].isMagic(JS_ARRAY_HOLE) && !--minimalDenseCount)
             return false;
@@ -305,6 +313,32 @@ IndexToId(JSContext* cx, JSObject* obj, jsdouble index, JSBool* hole, jsid* idp,
     }
 
     return ReallyBigIndexToId(cx, index, idp);
+}
+
+bool
+JSObject::arrayGetOwnDataElement(JSContext *cx, size_t i, Value *vp)
+{
+    JS_ASSERT(isArray());
+
+    if (isDenseArray()) {
+        if (i >= getArrayLength())
+            vp->setMagic(JS_ARRAY_HOLE);
+        else
+            *vp = getDenseArrayElement(uint32(i));
+        return true;
+    }
+
+    JSBool hole;
+    jsid id;
+    if (!IndexToId(cx, this, i, &hole, &id))
+        return false;
+
+    const Shape *shape = nativeLookup(id);
+    if (!shape || !shape->isDataDescriptor())
+        vp->setMagic(JS_ARRAY_HOLE);
+    else
+        *vp = getSlot(shape->slot);
+    return true;
 }
 
 /*
@@ -373,9 +407,10 @@ GetElements(JSContext *cx, JSObject *aobj, jsuint length, Value *vp)
     if (aobj->isDenseArray() && length <= aobj->getDenseArrayCapacity() &&
         !js_PrototypeHasIndexedProperties(cx, aobj)) {
         /* The prototype does not have indexed properties so hole = undefined */
-        Value *srcbeg = aobj->getDenseArrayElements();
-        Value *srcend = srcbeg + length;
-        for (Value *dst = vp, *src = srcbeg; src < srcend; ++dst, ++src)
+        const Value *srcbeg = aobj->getDenseArrayElements();
+        const Value *srcend = srcbeg + length;
+        const Value *src = srcbeg;
+        for (Value *dst = vp; src < srcend; ++dst, ++src)
             *dst = src->isMagic(JS_ARRAY_HOLE) ? UndefinedValue() : *src;
         return true;
     }
@@ -760,7 +795,7 @@ array_setProperty(JSContext *cx, JSObject *obj, jsid id, Value *vp, JSBool stric
         return array_length_setter(cx, obj, id, strict, vp);
 
     if (!obj->isDenseArray())
-        return js_SetProperty(cx, obj, id, vp, strict);
+        return js_SetPropertyHelper(cx, obj, id, 0, vp, strict);
 
     do {
         if (!js_IdIsIndex(id, &i))
@@ -784,7 +819,7 @@ array_setProperty(JSContext *cx, JSObject *obj, jsid id, Value *vp, JSBool stric
 
     if (!obj->makeDenseArraySlow(cx))
         return false;
-    return js_SetProperty(cx, obj, id, vp, strict);
+    return js_SetPropertyHelper(cx, obj, id, 0, vp, strict);
 }
 
 JSBool
@@ -897,7 +932,7 @@ array_trace(JSTracer *trc, JSObject *obj)
     JS_ASSERT(obj->isDenseArray());
 
     uint32 capacity = obj->getDenseArrayCapacity();
-    MarkValueRange(trc, capacity, obj->slots, "element");
+    MarkValueRange(trc, capacity, obj->getSlotsPtr(), "element");
 }
 
 static JSBool
@@ -1269,9 +1304,9 @@ array_toString_sub(JSContext *cx, JSObject *obj, JSBool locale,
 
     if (!locale && !seplen && obj->isDenseArray() && !js_PrototypeHasIndexedProperties(cx, obj)) {
         /* Elements beyond 'capacity' are 'undefined' and thus can be ignored. */
-        Value *beg = obj->getDenseArrayElements();
-        Value *end = beg + Min(length, obj->getDenseArrayCapacity());
-        for (Value *vp = beg; vp != end; ++vp) {
+        const Value *beg = obj->getDenseArrayElements();
+        const Value *end = beg + Min(length, obj->getDenseArrayCapacity());
+        for (const Value *vp = beg; vp != end; ++vp) {
             if (!JS_CHECK_OPERATION_LIMIT(cx))
                 return false;
 
@@ -1372,7 +1407,7 @@ array_toLocaleString(JSContext *cx, uintN argc, Value *vp)
 static JSBool
 InitArrayElements(JSContext *cx, JSObject *obj, jsuint start, jsuint count, Value *vector)
 {
-    JS_ASSERT(count < MAXINDEX);
+    JS_ASSERT(count <= MAX_ARRAY_INDEX);
 
     /*
      * Optimize for dense arrays so long as adding the given set of elements
@@ -1396,13 +1431,13 @@ InitArrayElements(JSContext *cx, JSObject *obj, jsuint start, jsuint count, Valu
             obj->setArrayLength(newlen);
 
         JS_ASSERT(count < uint32(-1) / sizeof(Value));
-        memcpy(obj->getDenseArrayElements() + start, vector, sizeof(jsval) * count);
+        obj->copyDenseArrayElements(start, vector, count);
         JS_ASSERT_IF(count != 0, !obj->getDenseArrayElement(newlen - 1).isMagic(JS_ARRAY_HOLE));
         return true;
     } while (false);
 
     Value* end = vector + count;
-    while (vector != end && start < MAXINDEX) {
+    while (vector != end && start <= MAX_ARRAY_INDEX) {
         if (!JS_CHECK_OPERATION_LIMIT(cx) ||
             !SetArrayElement(cx, obj, start++, *vector++)) {
             return JS_FALSE;
@@ -1416,10 +1451,10 @@ InitArrayElements(JSContext *cx, JSObject *obj, jsuint start, jsuint count, Valu
     if (obj->isDenseArray() && !ENSURE_SLOW_ARRAY(cx, obj))
         return JS_FALSE;
 
-    JS_ASSERT(start == MAXINDEX);
+    JS_ASSERT(start == MAX_ARRAY_INDEX + 1);
     AutoValueRooter tvr(cx);
     AutoIdRooter idr(cx);
-    Value idval = DoubleValue(MAXINDEX);
+    Value idval = DoubleValue(MAX_ARRAY_INDEX + 1);
     do {
         *tvr.addr() = *vector++;
         if (!js_ValueToStringId(cx, idval, idr.addr()) ||
@@ -1445,7 +1480,7 @@ InitArrayObject(JSContext *cx, JSObject *obj, jsuint length, const Value *vector
     /* Avoid ensureDenseArrayElements to skip sparse array checks there. */
     if (!obj->ensureSlots(cx, length))
         return false;
-    memcpy(obj->getDenseArrayElements(), vector, length * sizeof(Value));
+    obj->copyDenseArrayElements(0, vector, length);
     return true;
 }
 
@@ -2193,8 +2228,7 @@ array_shift(JSContext *cx, uintN argc, Value *vp)
             *vp = obj->getDenseArrayElement(0);
             if (vp->isMagic(JS_ARRAY_HOLE))
                 vp->setUndefined();
-            Value *elems = obj->getDenseArrayElements();
-            memmove(elems, elems + 1, length * sizeof(jsval));
+            obj->moveDenseArrayElements(0, 1, length);
             obj->setDenseArrayElement(length, MagicValue(JS_ARRAY_HOLE));
             obj->setArrayLength(length);
             if (!js_SuppressDeletedProperty(cx, obj, INT_TO_JSID(length)))
@@ -2256,8 +2290,7 @@ array_unshift(JSContext *cx, uintN argc, Value *vp)
                     JS_ASSERT(result == JSObject::ED_SPARSE);
                     break;
                 }
-                Value *elems = obj->getDenseArrayElements();
-                memmove(elems + argc, elems, length * sizeof(jsval));
+                obj->moveDenseArrayElements(argc, 0, length);
                 for (uint32 i = 0; i < argc; i++)
                     obj->setDenseArrayElement(i, MagicValue(JS_ARRAY_HOLE));
                 optimized = true;
@@ -2395,12 +2428,7 @@ array_splice(JSContext *cx, uintN argc, Value *vp)
                 JS_ASSERT(result == JSObject::ED_SPARSE);
                 break;
             }
-            Value *arraybeg = obj->getDenseArrayElements();
-            Value *srcbeg = arraybeg + last - 1;
-            Value *srcend = arraybeg + end - 1;
-            Value *dstbeg = srcbeg + delta;
-            for (Value *src = srcbeg, *dst = dstbeg; src > srcend; --src, --dst)
-                *dst = *src;
+            obj->moveDenseArrayElements(end + delta, end, last - end);
 
             obj->setArrayLength(obj->getArrayLength() + delta);
             optimized = true;
@@ -2422,12 +2450,7 @@ array_splice(JSContext *cx, uintN argc, Value *vp)
         if (obj->isDenseArray() && !js_PrototypeHasIndexedProperties(cx, obj) &&
             length <= obj->getDenseArrayCapacity()) {
 
-            Value *arraybeg = obj->getDenseArrayElements();
-            Value *srcbeg = arraybeg + end;
-            Value *srcend = arraybeg + length;
-            Value *dstbeg = srcbeg - delta;
-            for (Value *src = srcbeg, *dst = dstbeg; src < srcend; ++src, ++dst)
-                *dst = *src;
+            obj->moveDenseArrayElements(end - delta, end, length - end);
         } else {
             for (last = end; last < length; last++) {
                 if (!JS_CHECK_OPERATION_LIMIT(cx) ||
@@ -3091,7 +3114,7 @@ NewDenseUnallocatedArray(JSContext *cx, uint32 length, JSObject *proto)
 }
 
 JSObject *
-NewDenseCopiedArray(JSContext *cx, uintN length, Value *vp, JSObject *proto)
+NewDenseCopiedArray(JSContext *cx, uintN length, const Value *vp, JSObject *proto)
 {
     JSObject* obj = NewArray<true>(cx, length, proto);
     if (!obj)
@@ -3100,7 +3123,7 @@ NewDenseCopiedArray(JSContext *cx, uintN length, Value *vp, JSObject *proto)
     JS_ASSERT(obj->getDenseArrayCapacity() >= length);
 
     if (vp)
-        memcpy(obj->getDenseArrayElements(), vp, length * sizeof(Value));
+        obj->copyDenseArrayElements(0, vp, length);
 
     return obj;
 }

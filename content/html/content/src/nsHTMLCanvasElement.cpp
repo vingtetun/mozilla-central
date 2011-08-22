@@ -46,6 +46,7 @@
 #include "nsIScriptSecurityManager.h"
 #include "nsIXPConnect.h"
 #include "jsapi.h"
+#include "nsContentUtils.h"
 #include "nsJSUtils.h"
 #include "nsMathUtils.h"
 #include "mozilla/Preferences.h"
@@ -512,7 +513,6 @@ nsHTMLCanvasElement::GetContext(const nsAString& aContextId,
 
     rv = UpdateContext(contextProps);
     if (NS_FAILED(rv)) {
-      mCurrentContext = nsnull;
       if (!forceThebes) {
         // Try again with a Thebes context
         forceThebes = PR_TRUE;
@@ -558,10 +558,7 @@ nsHTMLCanvasElement::MozGetIPCContext(const nsAString& aContextId,
     mCurrentContext->SetIsIPC(PR_TRUE);
 
     rv = UpdateContext();
-    if (NS_FAILED(rv)) {
-      mCurrentContext = nsnull;
-      return rv;
-    }
+    NS_ENSURE_SUCCESS(rv, rv);
 
     mCurrentContextId.Assign(aContextId);
   } else if (!mCurrentContextId.Equals(aContextId)) {
@@ -585,18 +582,21 @@ nsHTMLCanvasElement::UpdateContext(nsIPropertyBag *aNewContextOptions)
   rv = mCurrentContext->SetIsOpaque(GetIsOpaque());
   if (NS_FAILED(rv)) {
     mCurrentContext = nsnull;
+    mCurrentContextId.AssignLiteral("");
     return rv;
   }
 
   rv = mCurrentContext->SetContextOptions(aNewContextOptions);
   if (NS_FAILED(rv)) {
     mCurrentContext = nsnull;
+    mCurrentContextId.AssignLiteral("");
     return rv;
   }
 
   rv = mCurrentContext->SetDimensions(sz.width, sz.height);
   if (NS_FAILED(rv)) {
     mCurrentContext = nsnull;
+    mCurrentContextId.AssignLiteral("");
     return rv;
   }
 

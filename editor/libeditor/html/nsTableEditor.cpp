@@ -39,9 +39,7 @@
 #include "nscore.h"
 #include "nsIDOMDocument.h"
 #include "nsEditor.h"
-#include "nsIDOMText.h"
 #include "nsIDOMElement.h"
-#include "nsIDOMAttr.h"
 #include "nsIDOMNode.h"
 #include "nsIDOMNodeList.h"
 #include "nsIDOMRange.h"
@@ -53,8 +51,6 @@
 #include "nsIContent.h"
 #include "nsIContentIterator.h"
 #include "nsIAtom.h"
-#include "nsIDOMHTMLTableElement.h"
-#include "nsIDOMHTMLTableCellElement.h"
 #include "nsITableCellLayout.h" // For efficient access to table cell
 #include "nsITableLayout.h"     //  data owned by the table and cell frames
 #include "nsHTMLEditor.h"
@@ -2677,7 +2673,7 @@ nsHTMLEditor::GetTableLayoutObject(nsIDOMElement* aTable, nsITableLayout **table
 }
 
 //Return actual number of cells (a cell with colspan > 1 counts as just 1)
-PRBool nsHTMLEditor::GetNumberOfCellsInRow(nsIDOMElement* aTable, PRInt32 rowIndex)
+PRInt32 nsHTMLEditor::GetNumberOfCellsInRow(nsIDOMElement* aTable, PRInt32 rowIndex)
 {
   PRInt32 cellCount = 0;
   nsCOMPtr<nsIDOMElement> cell;
@@ -2689,7 +2685,7 @@ PRBool nsHTMLEditor::GetNumberOfCellsInRow(nsIDOMElement* aTable, PRInt32 rowInd
     res = GetCellDataAt(aTable, rowIndex, colIndex, getter_AddRefs(cell),
                         &startRowIndex, &startColIndex, &rowSpan, &colSpan, 
                         &actualRowSpan, &actualColSpan, &isSelected);
-    NS_ENSURE_SUCCESS(res, res);
+    NS_ENSURE_SUCCESS(res, 0);
     if (cell)
     {
       // Only count cells that start in row we are working with

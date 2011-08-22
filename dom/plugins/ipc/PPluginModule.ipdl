@@ -39,6 +39,7 @@
 
 include protocol PPluginIdentifier;
 include protocol PPluginInstance;
+include protocol PPluginScriptableObject;
 
 include "npapi.h";
 include "mozilla/plugins/PluginMessageUtils.h";
@@ -111,6 +112,8 @@ child:
                             nsString aDisplayName,
                             nsString aIconPath);
 
+  async SetParentHangTimeout(uint32_t seconds);
+
 parent:
   /**
    * This message is only used on X11 platforms.
@@ -153,6 +156,9 @@ parent:
   async PushCursor(NSCursorInfo cursorInfo);
   async PopCursor();
   sync GetNativeCursorsSupported() returns (bool supported);
+
+  sync NPN_SetException(nullable PPluginScriptableObject actor,
+                        nsCString message);
 };
 
 } // namespace plugins

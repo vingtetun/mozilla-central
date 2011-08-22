@@ -60,11 +60,8 @@
 #include "RuntimeService.h"
 #include "XMLHttpRequest.h"
 
-USING_WORKERS_NAMESPACE
-
-using mozilla::dom::workers::xhr::XMLHttpRequestPrivate;
-using mozilla::dom::workers::xhr::Proxy;
-using mozilla::dom::workers::exceptions::ThrowDOMExceptionForCode;
+BEGIN_WORKERS_NAMESPACE
+namespace xhr {
 
 class Proxy : public nsIDOMEventListener
 {
@@ -187,6 +184,15 @@ public:
            mSyncEventResponseSyncQueueKey == PR_UINT32_MAX;
   }
 };
+
+} // namespace xhr
+END_WORKERS_NAMESPACE
+
+USING_WORKERS_NAMESPACE
+
+using mozilla::dom::workers::xhr::XMLHttpRequestPrivate;
+using mozilla::dom::workers::xhr::Proxy;
+using mozilla::dom::workers::exceptions::ThrowDOMExceptionForCode;
 
 namespace {
 
@@ -949,7 +955,7 @@ public:
       intN error = 0;
 
       jsval body;
-      if (mBody.read(&body, cx)) {
+      if (mBody.read(cx, &body)) {
         if (NS_FAILED(xpc->JSValToVariant(cx, &body,
                                           getter_AddRefs(variant)))) {
           error = INVALID_STATE_ERR;
@@ -959,7 +965,7 @@ public:
         error = DATA_CLONE_ERR;
       }
 
-      mBody.clear(cx);
+      mBody.clear();
 
       if (error) {
         return error;
@@ -1046,6 +1052,24 @@ public:
   MainThreadRun()
   {
     nsresult rv = mProxy->mXHR->SetRequestHeader(mHeader, mValue);
+    return GetDOMExceptionCodeFromResult(rv);
+  }
+};
+
+class OverrideMimeTypeRunnable : public WorkerThreadProxySyncRunnable
+{
+  nsCString mMimeType;
+
+public:
+  OverrideMimeTypeRunnable(WorkerPrivate* aWorkerPrivate, Proxy* aProxy,
+                           const nsCString& aMimeType)
+  : WorkerThreadProxySyncRunnable(aWorkerPrivate, aProxy), mMimeType(aMimeType)
+  { }
+
+  intN
+  MainThreadRun()
+  {
+    nsresult rv = mProxy->mXHR->OverrideMimeType(mMimeType);
     return GetDOMExceptionCodeFromResult(rv);
   }
 };
@@ -1615,6 +1639,36 @@ XMLHttpRequestPrivate::SetRequestHeader(JSContext* aCx, JSString* aHeader,
     new SetRequestHeaderRunnable(mWorkerPrivate, mProxy,
                                  NS_ConvertUTF16toUTF8(header),
                                  NS_ConvertUTF16toUTF8(value));
+  return runnable->Dispatch(aCx);
+}
+
+bool
+XMLHttpRequestPrivate::OverrideMimeType(JSContext* aCx, JSString* aMimeType)
+{
+  mWorkerPrivate->AssertIsOnWorkerThread();
+
+  if (mCanceled) {
+    return false;
+  }
+
+  // We're supposed to throw if the state is not OPENED or HEADERS_RECEIVED. We
+  // can detect OPENED really easily but we can't detect HEADERS_RECEIVED in a
+  // non-racy way until the XHR state machine actually runs on this thread
+  // (bug 671047). For now we're going to let this work only if the Send()
+  // method has not been called.
+  if (!mProxy || SendInProgress()) {
+    ThrowDOMExceptionForCode(aCx, INVALID_STATE_ERR);
+    return false;
+  }
+
+  nsDependentJSString mimeType;
+  if (!mimeType.init(aCx, aMimeType)) {
+    return false;
+  }
+
+  nsRefPtr<OverrideMimeTypeRunnable> runnable =
+    new OverrideMimeTypeRunnable(mWorkerPrivate, mProxy, 
+                                 NS_ConvertUTF16toUTF8(mimeType));
   return runnable->Dispatch(aCx);
 }
 

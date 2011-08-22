@@ -26,6 +26,7 @@
  *   Mihai Șucan <mihai.sucan@gmail.com>
  *   Julian Viereck <jviereck@mozilla.com>
  *   Paul Rouget <paul@mozilla.com>
+ *   Kyle Simpson <ksimpson@mozilla.com> 
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -70,6 +71,11 @@ const INSPECTOR_NOTIFICATIONS = {
 
   // Fires once the Inspector is closed.
   CLOSED: "inspector-closed",
+
+  // Event notifications for the attribute-value editor
+  EDITOR_OPENED: "inspector-editor-opened",
+  EDITOR_CLOSED: "inspector-editor-closed",
+  EDITOR_SAVED: "inspector-editor-saved",
 };
 
 ///////////////////////////////////////////////////////////////////////////
@@ -222,6 +228,7 @@ Highlighter.prototype = {
     this.highlighterContainer = null;
     this.win = null
     this.browser = null;
+    this.toolbar = null;
   },
 
   /**
@@ -528,6 +535,7 @@ Highlighter.prototype = {
  */
 var InspectorUI = {
   browser: null,
+  tools: {},
   showTextNodesWithWhitespace: false,
   inspecting: false,
   treeLoaded: false,
@@ -589,6 +597,8 @@ var InspectorUI = {
     this.ioBox = new InsideOutBox(this, this.treePanelDiv);
     this.ioBox.createObjectBox(this.win.document.documentElement);
     this.treeLoaded = true;
+    this.editingContext = null;
+    this.editingEvents = {};
 
     // initialize the highlighter
     this.initializeHighlighter();
@@ -612,6 +622,7 @@ var InspectorUI = {
       this.treeIFrame.setAttribute("flex", "1");
       this.treeIFrame.setAttribute("type", "content");
       this.treeIFrame.setAttribute("onclick", "InspectorUI.onTreeClick(event)");
+      this.treeIFrame.setAttribute("ondblclick", "InspectorUI.onTreeDblClick(event);");
       this.treeIFrame = this.treePanel.insertBefore(this.treeIFrame, resizerBox);
     }
 
@@ -757,6 +768,8 @@ var InspectorUI = {
     this.browser = gBrowser.selectedBrowser;
     this.win = this.browser.contentWindow;
     this.winID = this.getWindowID(this.win);
+    this.toolbar = document.getElementById("inspector-toolbar");
+
     if (!this.domplate) {
       Cu.import("resource:///modules/domplate.jsm", this);
       this.domplateUtils.setDOM(window);
@@ -764,6 +777,7 @@ var InspectorUI = {
 
     this.openTreePanel();
 
+    this.toolbar.hidden = false;
     this.inspectCmd.setAttribute("checked", true);
   },
 
@@ -812,11 +826,17 @@ var InspectorUI = {
    */
   closeInspectorUI: function IUI_closeInspectorUI(aKeepStore)
   {
+    // if currently editing an attribute value, closing the
+    // highlighter/HTML panel dismisses the editor
+    if (this.editingContext)
+      this.closeEditor();
+
     if (this.closing || !this.win || !this.browser) {
       return;
     }
 
     this.closing = true;
+    this.toolbar.hidden = true;
 
     if (!aKeepStore) {
       InspectorStore.deleteStore(this.winID);
@@ -859,6 +879,13 @@ var InspectorUI = {
       delete this.domplateUtils;
     }
 
+    this.saveToolState(this.winID);
+    this.toolsDo(function IUI_toolsHide(aTool) {
+      if (aTool.panel) {
+        aTool.panel.hidePopup();
+      }
+    });
+
     this.inspectCmd.setAttribute("checked", false);
     this.browser = this.win = null; // null out references to browser and window
     this.winID = null;
@@ -880,6 +907,12 @@ var InspectorUI = {
    */
   startInspecting: function IUI_startInspecting()
   {
+    // if currently editing an attribute value, starting
+    // "live inspection" mode closes the editor
+    if (this.editingContext)
+      this.closeEditor();
+
+    document.getElementById("inspector-inspect-toolbutton").checked = true;
     this.attachPageListeners();
     this.inspecting = true;
     this.highlighter.veilTransparentBox.removeAttribute("locked");
@@ -888,17 +921,20 @@ var InspectorUI = {
   /**
    * Stop inspecting webpage, detach page listeners, disable highlighter
    * event listeners.
+   * @param aPreventScroll
+   *        Prevent scroll in the HTML tree?
    */
-  stopInspecting: function IUI_stopInspecting()
+  stopInspecting: function IUI_stopInspecting(aPreventScroll)
   {
     if (!this.inspecting) {
       return;
     }
 
+    document.getElementById("inspector-inspect-toolbutton").checked = false;
     this.detachPageListeners();
     this.inspecting = false;
     if (this.highlighter.node) {
-      this.select(this.highlighter.node, true, true);
+      this.select(this.highlighter.node, true, true, !aPreventScroll);
     } else {
       this.select(null, true, true);
     }
@@ -916,6 +952,11 @@ var InspectorUI = {
    */
   select: function IUI_select(aNode, forceUpdate, aScroll)
   {
+    // if currently editing an attribute value, using the
+    // highlighter dismisses the editor
+    if (this.editingContext)
+      this.closeEditor();
+
     if (!aNode)
       aNode = this.defaultSelection;
 
@@ -926,6 +967,11 @@ var InspectorUI = {
       }
       this.ioBox.select(this.selection, true, true, aScroll);
     }
+    this.toolsDo(function IUI_toolsOnSelect(aTool) {
+      if (aTool.panel.state == "open") {
+        aTool.onSelect.apply(aTool.context, [aNode]);
+      }
+    });
   },
 
   /////////////////////////////////////////////////////////////////////////
@@ -974,6 +1020,7 @@ var InspectorUI = {
             }, INSPECTOR_NOTIFICATIONS.CLOSED, false);
           } else {
             this.openInspectorUI();
+            this.restoreToolState(winID);
           }
         }
 
@@ -1021,6 +1068,17 @@ var InspectorUI = {
    */
   onTreeClick: function IUI_onTreeClick(aEvent)
   {
+    // if currently editing an attribute value, clicking outside
+    // the editor dismisses the editor
+    if (this.editingContext) {
+      this.closeEditor();
+
+      // clicking outside the editor ONLY closes the editor
+      // so, cancel the rest of the processing of this event
+      aEvent.preventDefault();
+      return;
+    }
+
     let node;
     let target = aEvent.target;
     let hitTwisty = false;
@@ -1032,10 +1090,231 @@ var InspectorUI = {
     }
 
     if (node) {
-      if (hitTwisty)
+      if (hitTwisty) {
         this.ioBox.toggleObject(node);
-      this.select(node, false, false);
+      } else {
+        if (this.inspecting) {
+          this.stopInspecting(true);
+        } else {
+          this.select(node, true, false);
+          this.highlighter.highlightNode(node);
+        }
+      }
     }
+  },
+
+  /**
+   * Handle double-click events in the html tree panel.
+   * (double-clicking an attribute value allows it to be edited)
+   * @param aEvent
+   *        The mouse event.
+   */
+  onTreeDblClick: function IUI_onTreeDblClick(aEvent)
+  {
+    // if already editing an attribute value, double-clicking elsewhere
+    // in the tree is the same as a click, which dismisses the editor
+    if (this.editingContext)
+      this.closeEditor();
+
+    let target = aEvent.target;
+
+    if (this.hasClass(target, "nodeValue")) {
+      let repObj = this.getRepObject(target);
+      let attrName = target.getAttribute("data-attributeName");
+      let attrVal = target.innerHTML;
+
+      this.editAttributeValue(target, repObj, attrName, attrVal);
+    }
+  },
+
+  /**
+   * Starts the editor for an attribute value.
+   * @param aAttrObj
+   *        The DOM object representing the attribute value in the HTML Tree
+   * @param aRepObj
+   *        The original DOM (target) object being inspected/edited
+   * @param aAttrName
+   *        The name of the attribute being edited
+   * @param aAttrVal
+   *        The current value of the attribute being edited
+   */
+  editAttributeValue: 
+  function IUI_editAttributeValue(aAttrObj, aRepObj, aAttrName, aAttrVal)
+  {
+    let editor = this.treeBrowserDocument.getElementById("attribute-editor");
+    let editorInput = 
+      this.treeBrowserDocument.getElementById("attribute-editor-input");
+    let attrDims = aAttrObj.getBoundingClientRect();
+    // figure out actual viewable viewport dimensions (sans scrollbars)
+    let viewportWidth = this.treeBrowserDocument.documentElement.clientWidth;
+    let viewportHeight = this.treeBrowserDocument.documentElement.clientHeight;
+
+    // saves the editing context for use when the editor is saved/closed
+    this.editingContext = {
+      attrObj: aAttrObj,
+      repObj: aRepObj,
+      attrName: aAttrName
+    };
+
+    // highlight attribute-value node in tree while editing
+    this.addClass(aAttrObj, "editingAttributeValue");
+
+    // show the editor
+    this.addClass(editor, "editing");
+
+    // offset the editor below the attribute-value node being edited
+    let editorVeritcalOffset = 2;
+
+    // keep the editor comfortably within the bounds of the viewport
+    let editorViewportBoundary = 5;
+
+    // outer editor is sized based on the <input> box inside it
+    editorInput.style.width = Math.min(attrDims.width, viewportWidth - 
+                                editorViewportBoundary) + "px";
+    editorInput.style.height = Math.min(attrDims.height, viewportHeight - 
+                                editorViewportBoundary) + "px";
+    let editorDims = editor.getBoundingClientRect();
+
+    // calculate position for the editor according to the attribute node
+    let editorLeft = attrDims.left + this.treeIFrame.contentWindow.scrollX -
+                    // center the editor against the attribute value    
+                    ((editorDims.width - attrDims.width) / 2); 
+    let editorTop = attrDims.top + this.treeIFrame.contentWindow.scrollY + 
+                    attrDims.height + editorVeritcalOffset;
+
+    // but, make sure the editor stays within the visible viewport
+    editorLeft = Math.max(0, Math.min(
+                                      (this.treeIFrame.contentWindow.scrollX + 
+                                          viewportWidth - editorDims.width),
+                                      editorLeft)
+                          );
+    editorTop = Math.max(0, Math.min(
+                                      (this.treeIFrame.contentWindow.scrollY + 
+                                          viewportHeight - editorDims.height),
+                                      editorTop)
+                          );
+
+    // position the editor
+    editor.style.left = editorLeft + "px";
+    editor.style.top = editorTop + "px";
+
+    // set and select the text
+    editorInput.value = aAttrVal;
+    editorInput.select();
+
+    // listen for editor specific events
+    this.bindEditorEvent(editor, "click", function(aEvent) {
+      aEvent.stopPropagation();
+    });
+    this.bindEditorEvent(editor, "dblclick", function(aEvent) {
+      aEvent.stopPropagation();
+    });
+    this.bindEditorEvent(editor, "keypress", 
+                          this.handleEditorKeypress.bind(this));
+
+    // event notification    
+    Services.obs.notifyObservers(null, INSPECTOR_NOTIFICATIONS.EDITOR_OPENED, 
+                                  null);
+  },
+
+  /**
+   * Handle binding an event handler for the editor.
+   * (saves the callback for easier unbinding later)   
+   * @param aEditor
+   *        The DOM object for the editor
+   * @param aEventName
+   *        The name of the event to listen for
+   * @param aEventCallback
+   *        The callback to bind to the event (and also to save for later 
+   *          unbinding)
+   */
+  bindEditorEvent: 
+  function IUI_bindEditorEvent(aEditor, aEventName, aEventCallback)
+  {
+    this.editingEvents[aEventName] = aEventCallback;
+    aEditor.addEventListener(aEventName, aEventCallback, false);
+  },
+
+  /**
+   * Handle unbinding an event handler from the editor.
+   * (unbinds the previously bound and saved callback)   
+   * @param aEditor
+   *        The DOM object for the editor
+   * @param aEventName
+   *        The name of the event being listened for
+   */
+  unbindEditorEvent: function IUI_unbindEditorEvent(aEditor, aEventName)
+  {
+    aEditor.removeEventListener(aEventName, this.editingEvents[aEventName], 
+                                  false);
+    this.editingEvents[aEventName] = null;
+  },
+
+  /**
+   * Handle keypress events in the editor.
+   * @param aEvent
+   *        The keyboard event.
+   */
+  handleEditorKeypress: function IUI_handleEditorKeypress(aEvent)
+  {
+    if (aEvent.which == KeyEvent.DOM_VK_RETURN) {
+      this.saveEditor();
+    } else if (aEvent.keyCode == KeyEvent.DOM_VK_ESCAPE) {
+      this.closeEditor();
+    }
+  },
+
+  /**
+   * Close the editor and cleanup.
+   */
+  closeEditor: function IUI_closeEditor()
+  {
+    let editor = this.treeBrowserDocument.getElementById("attribute-editor");
+    let editorInput = 
+      this.treeBrowserDocument.getElementById("attribute-editor-input");
+
+    // remove highlight from attribute-value node in tree
+    this.removeClass(this.editingContext.attrObj, "editingAttributeValue");
+
+    // hide editor
+    this.removeClass(editor, "editing");
+
+    // stop listening for editor specific events
+    this.unbindEditorEvent(editor, "click");
+    this.unbindEditorEvent(editor, "dblclick");
+    this.unbindEditorEvent(editor, "keypress");
+
+    // clean up after the editor
+    editorInput.value = "";
+    editorInput.blur();
+    this.editingContext = null;
+    this.editingEvents = {};
+
+    // event notification    
+    Services.obs.notifyObservers(null, INSPECTOR_NOTIFICATIONS.EDITOR_CLOSED, 
+                                  null);
+  },
+
+  /**
+   * Commit the edits made in the editor, then close it.
+   */
+  saveEditor: function IUI_saveEditor()
+  {
+    let editorInput = 
+      this.treeBrowserDocument.getElementById("attribute-editor-input");
+
+    // set the new attribute value on the original target DOM element
+    this.editingContext.repObj.setAttribute(this.editingContext.attrName, 
+                                              editorInput.value);
+
+    // update the HTML tree attribute value
+    this.editingContext.attrObj.innerHTML = editorInput.value;
+
+    // event notification    
+    Services.obs.notifyObservers(null, INSPECTOR_NOTIFICATIONS.EDITOR_SAVED, 
+                                  null);
+    
+    this.closeEditor();
   },
 
   /**
@@ -1222,7 +1501,113 @@ var InspectorUI = {
     }
     this._log("END TRACE");
   },
-}
+
+  /**
+   * Register an external tool with the inspector.
+   *
+   * aRegObj = {
+   *   id: "toolname",
+   *   context: myTool,
+   *   label: "Button label",
+   *   icon: "chrome://somepath.png",
+   *   tooltiptext: "Button tooltip",
+   *   accesskey: "S",
+   *   onSelect: object.method,
+   *   onShow: object.method,
+   *   onHide: object.method,
+   *   panel: myTool.panel
+   * }
+   *
+   * @param aRegObj
+   */
+  registerTool: function IUI_RegisterTool(aRegObj) {
+    if (this.tools[aRegObj.id]) {
+      return;
+    } else {
+      let id = aRegObj.id;
+      let buttonId = "inspector-" + id + "-toolbutton";
+      aRegObj.buttonId = buttonId;
+
+      aRegObj.panel.addEventListener("popuphiding",
+        function IUI_toolPanelHiding() {
+          btn.setAttribute("checked", "false");
+        }, false);
+      aRegObj.panel.addEventListener("popupshowing",
+        function IUI_toolPanelShowing() {
+          btn.setAttribute("checked", "true");
+        }, false);
+
+      this.tools[id] = aRegObj;
+    }
+
+    let toolbox = document.getElementById("inspector-tools");
+    let btn = document.createElement("toolbarbutton");
+    btn.setAttribute("id", aRegObj.buttonId);
+    btn.setAttribute("label", aRegObj.label);
+    btn.setAttribute("tooltiptext", aRegObj.tooltiptext);
+    btn.setAttribute("accesskey", aRegObj.accesskey);
+    btn.setAttribute("class", "toolbarbutton-text");
+    btn.setAttribute("image", aRegObj.icon || "");
+    toolbox.appendChild(btn);
+
+    btn.addEventListener("click",
+      function IUI_ToolButtonClick(aEvent) {
+        if (btn.getAttribute("checked") == "true") {
+          aRegObj.onHide.apply(aRegObj.context);
+        } else {
+          aRegObj.onShow.apply(aRegObj.context, [InspectorUI.selection]);
+          aRegObj.onSelect.apply(aRegObj.context, [InspectorUI.selection]);
+        }
+      }, false);
+  },
+
+/**
+ * Save a list of open tools to the inspector store.
+ *
+ * @param aWinID The ID of the window used to save the associated tools
+ */
+  saveToolState: function IUI_saveToolState(aWinID)
+  {
+    let openTools = {};
+    this.toolsDo(function IUI_toolsSetId(aTool) {
+      if (aTool.panel.state == "open") {
+        openTools[aTool.id] = true;
+      }
+    });
+    InspectorStore.setValue(aWinID, "openTools", openTools);
+  },
+
+/**
+ * Restore tools previously save using saveToolState().
+ *
+ * @param aWinID The ID of the window to which the associated tools are to be
+ *               restored.
+ */
+  restoreToolState: function IUI_restoreToolState(aWinID)
+  {
+    let openTools = InspectorStore.getValue(aWinID, "openTools");
+    InspectorUI.selection = InspectorUI.selection;
+    if (openTools) {
+      this.toolsDo(function IUI_toolsOnShow(aTool) {
+        if (aTool.id in openTools) {
+          aTool.onShow.apply(aTool.context, [InspectorUI.selection]);
+        }
+      });
+    }
+  },
+  
+  /**
+   * Loop through all registered tools and pass each into the provided function
+   *
+   * @param aFunction The function to which each tool is to be passed
+   */
+  toolsDo: function IUI_toolsDo(aFunction)
+  {
+    for each (let tool in this.tools) {
+      aFunction(tool);
+    }
+  },
+};
 
 /**
  * The Inspector store is used for storing data specific to each tab window.
@@ -1357,4 +1742,3 @@ var InspectorStore = {
 XPCOMUtils.defineLazyGetter(InspectorUI, "inspectCmd", function () {
   return document.getElementById("Tools:Inspect");
 });
-

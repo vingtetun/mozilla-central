@@ -222,7 +222,7 @@ Shape::hash() const
     JSDHashNumber hash = 0;
 
     /* Accumulate from least to most random so the low bits are most random. */
-    JS_ASSERT_IF(isMethod(), !rawSetter || rawSetter == js_watch_set);
+    JS_ASSERT_IF(isMethod(), !rawSetter);
     if (rawGetter)
         hash = JS_ROTATE_LEFT32(hash, 4) ^ jsuword(rawGetter);
     if (rawSetter)
@@ -267,7 +267,7 @@ Shape::get(JSContext* cx, JSObject *receiver, JSObject* obj, JSObject *pobj, js:
     if (hasGetterValue()) {
         JS_ASSERT(!isMethod());
         js::Value fval = getterValue();
-        return js::ExternalGetOrSet(cx, receiver, propid, fval, JSACC_READ, 0, 0, vp);
+        return js::InvokeGetterOrSetter(cx, receiver, fval, 0, 0, vp);
     }
 
     if (isMethod()) {
@@ -291,7 +291,7 @@ Shape::set(JSContext* cx, JSObject* obj, bool strict, js::Value* vp) const
 
     if (attrs & JSPROP_SETTER) {
         js::Value fval = setterValue();
-        return js::ExternalGetOrSet(cx, obj, propid, fval, JSACC_WRITE, 1, vp, vp);
+        return js::InvokeGetterOrSetter(cx, obj, fval, 1, vp, vp);
     }
 
     if (attrs & JSPROP_GETTER)

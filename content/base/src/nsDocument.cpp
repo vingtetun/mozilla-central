@@ -202,6 +202,12 @@
 #include "nsDOMTouchEvent.h"
 
 #include "mozilla/Preferences.h"
+#include "nsFrame.h"
+
+#include "imgILoader.h"
+
+#include "nsDOMCaretPosition.h"
+#include "nsIDOMHTMLTextAreaElement.h"
 
 using namespace mozilla;
 using namespace mozilla::dom;
@@ -1577,6 +1583,8 @@ nsDocument::~nsDocument()
 #ifdef DEBUG
   nsCycleCollector_DEBUG_wasFreed(static_cast<nsIDocument*>(this));
 #endif
+
+  NS_ASSERTION(!mIsShowing, "Destroying a currently-showing document");
 
   mInDestructor = PR_TRUE;
   mInUnlinkOrDeletion = PR_TRUE;
@@ -3192,9 +3200,7 @@ nsDocument::doCreateShell(nsPresContext* aContext,
 
   mExternalResourceMap.ShowViewers();
 
-  if (mScriptGlobalObject) {
-    RescheduleAnimationFrameNotifications();
-  }
+  MaybeRescheduleAnimationFrameNotifications();
 
   shell.swap(*aInstancePtrResult);
 
@@ -3202,8 +3208,13 @@ nsDocument::doCreateShell(nsPresContext* aContext,
 }
 
 void
-nsDocument::RescheduleAnimationFrameNotifications()
+nsDocument::MaybeRescheduleAnimationFrameNotifications()
 {
+  if (!mPresShell || !IsEventHandlingEnabled()) {
+    // bail out for now, until one of those conditions changes
+    return;
+  }
+
   nsRefreshDriver* rd = mPresShell->GetPresContext()->RefreshDriver();
   if (mHavePendingPaint) {
     rd->ScheduleBeforePaintEvent(this);
@@ -3224,7 +3235,7 @@ void
 nsDocument::DeleteShell()
 {
   mExternalResourceMap.HideViewers();
-  if (mScriptGlobalObject) {
+  if (IsEventHandlingEnabled()) {
     RevokeAnimationFrameNotifications();
   }
   mPresShell = nsnull;
@@ -3772,7 +3783,7 @@ nsDocument::SetScriptGlobalObject(nsIScriptGlobalObject *aScriptGlobalObject)
     // our layout history state now.
     mLayoutHistoryState = GetLayoutHistoryState();
 
-    if (mPresShell) {
+    if (mPresShell && !EventHandlingSuppressed()) {
       RevokeAnimationFrameNotifications();
     }
 
@@ -3833,9 +3844,7 @@ nsDocument::SetScriptGlobalObject(nsIScriptGlobalObject *aScriptGlobalObject)
       }
     }
 
-    if (mPresShell) {
-      RescheduleAnimationFrameNotifications();
-    }
+    MaybeRescheduleAnimationFrameNotifications();
   }
 
   // Remember the pointer to our window (or lack there of), to avoid
@@ -5915,6 +5924,13 @@ nsDocument::SetXmlStandalone(PRBool aXmlStandalone)
 }
 
 NS_IMETHODIMP
+nsDocument::GetMozSyntheticDocument(PRBool *aSyntheticDocument)
+{
+  *aSyntheticDocument = mIsSyntheticDocument;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
 nsDocument::GetXmlVersion(nsAString& aXmlVersion)
 {
   if (IsHTML()) {
@@ -7644,6 +7660,10 @@ SuppressEventHandlingInDocument(nsIDocument* aDocument, void* aData)
 void
 nsDocument::SuppressEventHandling(PRUint32 aIncrease)
 {
+  if (mEventsSuppressed == 0 && aIncrease != 0 && mPresShell &&
+      mScriptGlobalObject) {
+    RevokeAnimationFrameNotifications();
+  }
   mEventsSuppressed += aIncrease;
   EnumerateSubDocuments(SuppressEventHandlingInDocument, &aIncrease);
 }
@@ -7668,7 +7688,7 @@ FireOrClearDelayedEvents(nsTArray<nsCOMPtr<nsIDocument> >& aDocuments,
 }
 
 void
-nsDocument::MaybePreLoadImage(nsIURI* uri)
+nsDocument::MaybePreLoadImage(nsIURI* uri, const nsAString &aCrossOriginAttr)
 {
   // Early exit if the img is already present in the img-cache
   // which indicates that the "real" load has already started and
@@ -7680,6 +7700,16 @@ nsDocument::MaybePreLoadImage(nsIURI* uri)
     return;
   }
 
+  nsLoadFlags loadFlags = nsIRequest::LOAD_NORMAL;
+  if (aCrossOriginAttr.LowerCaseEqualsLiteral("anonymous")) {
+    loadFlags |= imgILoader::LOAD_CORS_ANONYMOUS;
+  } else if (aCrossOriginAttr.LowerCaseEqualsLiteral("use-credentials")) {
+    loadFlags |= imgILoader::LOAD_CORS_USE_CREDENTIALS;
+  }
+  // else should we err on the side of not doing the preload if
+  // aCrossOriginAttr is nonempty?  Let's err on the side of doing the
+  // preload as CORS_NONE.
+
   // Image not in cache - trigger preload
   nsCOMPtr<imgIRequest> request;
   nsresult rv =
@@ -7688,7 +7718,7 @@ nsDocument::MaybePreLoadImage(nsIURI* uri)
                               NodePrincipal(),
                               mDocumentURI, // uri of document used as referrer
                               nsnull,       // no observer
-                              nsIRequest::LOAD_NORMAL,
+                              loadFlags,
                               getter_AddRefs(request));
 
   // Pin image-reference to avoid evicting it from the img-cache before
@@ -7793,13 +7823,8 @@ GetAndUnsuppressSubDocuments(nsIDocument* aDocument, void* aData)
 void
 nsDocument::UnsuppressEventHandlingAndFireEvents(PRBool aFireEvents)
 {
-  if (mEventsSuppressed > 0) {
-    --mEventsSuppressed;
-  }
-
   nsTArray<nsCOMPtr<nsIDocument> > documents;
-  documents.AppendElement(this);
-  EnumerateSubDocuments(GetAndUnsuppressSubDocuments, &documents);
+  GetAndUnsuppressSubDocuments(this, &documents);
 
   if (aFireEvents) {
     NS_DispatchToCurrentThread(new nsDelayedEventDispatcher(documents));
@@ -8028,7 +8053,7 @@ nsIDocument::ScheduleBeforePaintEvent(nsIAnimationFrameListener* aListener)
   if (aListener) {
     PRBool alreadyRegistered = !mAnimationFrameListeners.IsEmpty();
     if (mAnimationFrameListeners.AppendElement(aListener) &&
-        !alreadyRegistered && mPresShell) {
+        !alreadyRegistered && mPresShell && IsEventHandlingEnabled()) {
       mPresShell->GetPresContext()->RefreshDriver()->
         ScheduleAnimationFrameListeners(this);
     }
@@ -8042,6 +8067,7 @@ nsIDocument::ScheduleBeforePaintEvent(nsIAnimationFrameListener* aListener)
     // event will fire, or we'll quietly go away at some point.
     mHavePendingPaint =
       !mPresShell ||
+      !IsEventHandlingEnabled() ||
       mPresShell->GetPresContext()->RefreshDriver()->
         ScheduleBeforePaintEvent(this);
   }
@@ -8372,6 +8398,58 @@ nsDocument::CreateTouchList(nsIVariant* aPoints,
   return NS_OK;
 }
 
+NS_IMETHODIMP
+nsDocument::CaretPositionFromPoint(float aX, float aY, nsIDOMCaretPosition** aCaretPos)
+{
+  NS_ENSURE_ARG_POINTER(aCaretPos);
+  *aCaretPos = nsnull;
+  
+  nscoord x = nsPresContext::CSSPixelsToAppUnits(aX);
+  nscoord y = nsPresContext::CSSPixelsToAppUnits(aY);
+  nsPoint pt(x, y);
+
+  nsIPresShell *ps = GetShell();
+  if (!ps) {
+    return NS_OK;
+  }
+
+  nsIFrame *rootFrame = ps->GetRootFrame();
+
+  // XUL docs, unlike HTML, have no frame tree until everything's done loading
+  if (!rootFrame) {
+    return NS_OK; // return null to premature XUL callers as a reminder to wait
+  }
+
+  nsIFrame *ptFrame = nsLayoutUtils::GetFrameForPoint(rootFrame, pt, PR_TRUE,
+                                                      PR_FALSE);
+  if (!ptFrame) {
+    return NS_OK;
+  }
+
+  nsFrame::ContentOffsets offsets = ptFrame->GetContentOffsetsFromPoint(pt);
+  nsCOMPtr<nsIDOMNode> node = do_QueryInterface(offsets.content);
+  nsIContent* ptContent = offsets.content;
+  PRInt32 offset = offsets.offset;
+  if (ptContent && ptContent->IsInNativeAnonymousSubtree()) {
+    nsIContent* nonanon = ptContent->FindFirstNonNativeAnonymous();
+    nsCOMPtr<nsIDOMHTMLInputElement> input = do_QueryInterface(nonanon);
+    nsCOMPtr<nsIDOMHTMLTextAreaElement> textArea = do_QueryInterface(nonanon);
+    PRBool isText;
+    if (textArea || (input &&
+                     NS_SUCCEEDED(input->MozIsTextField(PR_FALSE, &isText)) && 
+                     isText)) {
+      node = do_QueryInterface(nonanon);
+    } else {
+      node = nsnull;
+      offset = 0;
+    }
+  }
+
+  *aCaretPos = new nsDOMCaretPosition(node, offset);
+  NS_ADDREF(*aCaretPos);
+  return NS_OK;
+}
+
 PRInt64
 nsIDocument::SizeOf() const
 {
@@ -8389,7 +8467,7 @@ PRInt64
 nsDocument::SizeOf() const
 {
   PRInt64 size = MemoryReporter::GetBasicSize<nsDocument, nsIDocument>(this);
-  size += mAttrStyleSheet ? mAttrStyleSheet->SizeOf() : 0;
+  size += mAttrStyleSheet ? mAttrStyleSheet->DOMSizeOf() : 0;
   return size;
 }
 
