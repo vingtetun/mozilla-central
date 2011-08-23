@@ -42,6 +42,6 @@
         sizemode="fullscreen"
         width="480" height="800"
         style="background: black; overflow: hidden;">
-  <iframe id="home" src="/sdcard/homescreen.html"
+  <iframe id="home" src="/data/local/homescreen.html"
           style="width: 480px; height: 800px; overflow: hidden;"></iframe>
 </window>
