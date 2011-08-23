@@ -39,9 +39,9 @@
 
 <window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
         id="screen"
+        sizemode="fullscreen"
         width="480" height="800"
         style="background: black; overflow: hidden;">
-  <iframe id="home"
-          src="http://www.bing.com/"
+  <iframe id="home" src="homescreen.html"
           style="width: 480px; height: 800px; overflow: hidden;"></iframe>
 </window>
