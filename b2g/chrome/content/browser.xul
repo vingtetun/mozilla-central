@@ -41,7 +41,7 @@
         id="screen"
         sizemode="fullscreen"
         width="480" height="800"
-        style="background: black; overflow: hidden;">
+        style="background: white; overflow: hidden;">
   <iframe id="home" src="file:///data/local/homescreen.html"
           style="width: 480px; height: 800px; overflow: hidden;"></iframe>
 </window>

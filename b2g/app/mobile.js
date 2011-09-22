@@ -565,11 +565,7 @@ pref("services.sync.prefs.sync.signon.rememberSignons", true);
 pref("ui.dragThresholdX", 25);
 pref("ui.dragThresholdY", 25);
 
-#if MOZ_PLATFORM_MAEMO == 6
 pref("layers.acceleration.disabled", false);
-#else
-pref("layers.acceleration.disabled", true);
-#endif
 
 pref("notification.feature.enabled", true);
 
@@ -665,3 +661,10 @@ pref("content.ime.strict_policy", true);
 // $ adb shell setprop log.redirect-stdio true
 // $ adb shell start
 pref("browser.dom.window.dump.enabled", false);
+
+
+
+// Temporarily relax file:// origin checks so that we can use <img>s
+// from other dirs as webgl textures and more.  Remove me when we have
+// installable apps or wifi support.
+pref("security.fileuri.strict_origin_policy", false);
