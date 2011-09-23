@@ -485,7 +485,7 @@ pref("editor.singleLine.pasteNewlines", 2);
 pref("ui.dragThresholdX", 25);
 pref("ui.dragThresholdY", 25);
 
-pref("layers.acceleration.disabled", true);
+pref("layers.acceleration.disabled", false);
 
 pref("notification.feature.enabled", true);
 
@@ -581,6 +581,7 @@ pref("content.ime.strict_policy", true);
 // $ adb shell setprop log.redirect-stdio true
 // $ adb shell start
 pref("browser.dom.window.dump.enabled", false);
+
 
 
 // Temporarily relax file:// origin checks so that we can use <img>s
