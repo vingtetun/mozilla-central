@@ -84,9 +84,6 @@ pref("network.http.max-connections", 6);
 pref("network.http.max-connections-per-server", 4);
 pref("network.http.max-persistent-connections-per-server", 4);
 pref("network.http.max-persistent-connections-per-proxy", 4);
-#ifdef MOZ_PLATFORM_MAEMO
-pref("network.autodial-helper.enabled", true);
-#endif
 
 // See bug 545869 for details on why these are set the way they are
 pref("network.buffer.cache.count", 24);
@@ -335,10 +332,6 @@ pref("privacy.item.geolocation", true);
 pref("privacy.item.siteSettings", true);
 pref("privacy.item.syncAccount", true);
 
-#ifdef MOZ_PLATFORM_MAEMO
-pref("plugins.force.wmode", "opaque");
-#endif
-
 // URL to the Learn More link XXX this is the firefox one.  Bug 495578 fixes this.
 pref("browser.geolocation.warning.infoURL", "http://www.mozilla.com/%LOCALE%/firefox/geolocation/");
 
@@ -395,20 +388,8 @@ pref("browser.ui.touch.bottom", 4);
 pref("browser.ui.touch.weight.visited", 120); // percentage
 
 // plugins
-#if MOZ_PLATFORM_MAEMO == 6
-pref("plugin.disable", false);
-#else
 pref("plugin.disable", true);
-#endif
 pref("dom.ipc.plugins.enabled", true);
-
-// process priority
-// higher values give content process less CPU time
-#if MOZ_PLATFORM_MAEMO == 5
-pref("dom.ipc.content.nice", 10);
-#else
-pref("dom.ipc.content.nice", 1);
-#endif
 
 // product URLs
 // The breakpad report server to link to in about:crashes
@@ -499,48 +480,12 @@ pref("app.update.url.details", "http://www.mozilla.com/%LOCALE%/mobile/");
 // replace newlines with spaces on paste into single-line text boxes
 pref("editor.singleLine.pasteNewlines", 2);
 
-#ifdef MOZ_PLATFORM_MAEMO
-// update fonts for better readability
-pref("font.default.x-baltic", "SwissA");
-pref("font.default.x-central-euro", "SwissA");
-pref("font.default.x-cyrillic", "SwissA");
-pref("font.default.x-unicode", "SwissA");
-pref("font.default.x-user-def", "SwissA");
-pref("font.default.x-western", "SwissA");
-#endif
-
-#ifdef MOZ_SERVICES_SYNC
-pref("browser.sync.enabled", true);
-
-// sync service
-pref("services.sync.client.type", "mobile");
-pref("services.sync.registerEngines", "Tab,Bookmarks,Form,History,Password,Prefs");
-pref("services.sync.autoconnectDelay", 5);
-
-// prefs to sync by default
-pref("services.sync.prefs.sync.browser.startup.homepage.title", true);
-pref("services.sync.prefs.sync.browser.startup.homepage", true);
-pref("services.sync.prefs.sync.browser.tabs.warnOnClose", true);
-pref("services.sync.prefs.sync.browser.ui.zoom.reflow", true);
-pref("services.sync.prefs.sync.devtools.errorconsole.enabled", true);
-pref("services.sync.prefs.sync.javascript.enabled", true);
-pref("services.sync.prefs.sync.lightweightThemes.isThemeSelected", true);
-pref("services.sync.prefs.sync.lightweightThemes.usedThemes", true);
-pref("services.sync.prefs.sync.network.cookie.cookieBehavior", true);
-pref("services.sync.prefs.sync.permissions.default.image", true);
-pref("services.sync.prefs.sync.signon.rememberSignons", true);
-#endif
-
 // threshold where a tap becomes a drag, in 1/240" reference pixels
 // The names of the preferences are to be in sync with nsEventStateManager.cpp
 pref("ui.dragThresholdX", 25);
 pref("ui.dragThresholdY", 25);
 
-#if MOZ_PLATFORM_MAEMO == 6
-pref("layers.acceleration.disabled", false);
-#else
 pref("layers.acceleration.disabled", true);
-#endif
 
 pref("notification.feature.enabled", true);
 
@@ -636,3 +581,9 @@ pref("content.ime.strict_policy", true);
 // $ adb shell setprop log.redirect-stdio true
 // $ adb shell start
 pref("browser.dom.window.dump.enabled", false);
+
+
+// Temporarily relax file:// origin checks so that we can use <img>s
+// from other dirs as webgl textures and more.  Remove me when we have
+// installable apps or wifi support.
+pref("security.fileuri.strict_origin_policy", false);
