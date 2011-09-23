@@ -35,11 +35,14 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-//@line 39 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#filter substitution
 
 pref("toolkit.defaultChromeURI", "chrome://browser/content/shell.xul");
 pref("general.useragent.compatMode.firefox", true);
 pref("browser.chromeURL", "chrome://browser/content/");
+
+// Device pixel to CSS px ratio, in percent. Set to -1 to calculate based on display density.
+pref("browser.viewport.scaleRatio", -1);
 
 /* allow scrollbars to float above chrome ui */
 pref("ui.scrollbarsCanOverlapContent", 1);
@@ -81,7 +84,9 @@ pref("network.http.max-connections", 6);
 pref("network.http.max-connections-per-server", 4);
 pref("network.http.max-persistent-connections-per-server", 4);
 pref("network.http.max-persistent-connections-per-proxy", 4);
-//@line 87 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#ifdef MOZ_PLATFORM_MAEMO
+pref("network.autodial-helper.enabled", true);
+#endif
 
 // See bug 545869 for details on why these are set the way they are
 pref("network.buffer.cache.count", 24);
@@ -89,6 +94,9 @@ pref("network.buffer.cache.size",  16384);
 
 /* history max results display */
 pref("browser.display.history.maxresults", 100);
+
+/* How many times should have passed before the remote tabs list is refreshed */
+pref("browser.display.remotetabs.timeout", 10);
 
 /* session history */
 pref("browser.sessionhistory.max_total_viewers", 1);
@@ -133,6 +141,16 @@ pref("browser.helperApps.deleteTempFileOnExit", false);
 pref("signon.rememberSignons", true);
 pref("signon.expireMasterPassword", false);
 pref("signon.SignonFileName", "signons.txt");
+
+/* form helper */
+// 0 = disabled, 1 = enabled, 2 = dynamic depending on screen size
+pref("formhelper.mode", 2);
+pref("formhelper.autozoom", true);
+pref("formhelper.autozoom.caret", true);
+pref("formhelper.restore", false);
+
+/* find helper */
+pref("findhelper.autozoom", true);
 
 /* autocomplete */
 pref("browser.formfill.enable", true);
@@ -317,7 +335,9 @@ pref("privacy.item.geolocation", true);
 pref("privacy.item.siteSettings", true);
 pref("privacy.item.syncAccount", true);
 
-//@line 325 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#ifdef MOZ_PLATFORM_MAEMO
+pref("plugins.force.wmode", "opaque");
+#endif
 
 // URL to the Learn More link XXX this is the firefox one.  Bug 495578 fixes this.
 pref("browser.geolocation.warning.infoURL", "http://www.mozilla.com/%LOCALE%/firefox/geolocation/");
@@ -375,16 +395,20 @@ pref("browser.ui.touch.bottom", 4);
 pref("browser.ui.touch.weight.visited", 120); // percentage
 
 // plugins
-//@line 385 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#if MOZ_PLATFORM_MAEMO == 6
+pref("plugin.disable", false);
+#else
 pref("plugin.disable", true);
-//@line 387 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#endif
 pref("dom.ipc.plugins.enabled", true);
 
 // process priority
 // higher values give content process less CPU time
-//@line 394 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#if MOZ_PLATFORM_MAEMO == 5
+pref("dom.ipc.content.nice", 10);
+#else
 pref("dom.ipc.content.nice", 1);
-//@line 396 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#endif
 
 // product URLs
 // The breakpad report server to link to in about:crashes
@@ -395,10 +419,13 @@ pref("app.support.baseURL", "http://support.mozilla.com/mobile");
 pref("app.feedbackURL", "http://input.mozilla.com/feedback/");
 pref("app.privacyURL", "http://www.mozilla.com/%LOCALE%/m/privacy.html");
 pref("app.creditsURL", "http://www.mozilla.org/credits/");
-//@line 410 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#if MOZ_UPDATE_CHANNEL == beta
+pref("app.featuresURL", "http://www.mozilla.com/%LOCALE%/mobile/beta/features/");
+pref("app.faqURL", "http://www.mozilla.com/%LOCALE%/mobile/beta/faq/");
+#else
 pref("app.featuresURL", "http://www.mozilla.com/%LOCALE%/mobile/features/");
 pref("app.faqURL", "http://www.mozilla.com/%LOCALE%/mobile/faq/");
-//@line 413 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#endif
 
 // Name of alternate about: page for certificate errors (when undefined, defaults to about:neterror)
 pref("security.alternate_certificate_error_page", "certerror");
@@ -435,16 +462,20 @@ pref("ui.window", "#efebe7");
 pref("ui.windowtext", "#101010");
 pref("ui.windowframe", "#efebe7");
 
-//@line 454 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#ifdef MOZ_OFFICIAL_BRANDING
+pref("browser.search.param.yahoo-fr", "moz35");
+pref("browser.search.param.yahoo-fr-cjkt", "moz35");
+pref("browser.search.param.yahoo-fr-ja", "mozff");
+#endif
 
 /* app update prefs */
 pref("app.update.timer", 60000); // milliseconds (1 min)
 
-//@line 459 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#ifdef MOZ_UPDATER
 pref("app.update.enabled", true);
 pref("app.update.timerFirstInterval", 20000); // milliseconds
 pref("app.update.auto", false);
-pref("app.update.channel", "default");
+pref("app.update.channel", "@MOZ_UPDATE_CHANNEL@");
 pref("app.update.mode", 1);
 pref("app.update.silent", false);
 pref("app.update.url", "https://aus2.mozilla.org/update/4/%PRODUCT%/%VERSION%/%BUILD_ID%/%BUILD_TARGET%/%LOCALE%/%CHANNEL%/%OS_VERSION%/%DISTRIBUTION%/%DISTRIBUTION_VERSION%/%PLATFORM_VERSION%/update.xml");
@@ -454,18 +485,31 @@ pref("app.update.showInstalledUI", false);
 pref("app.update.incompatible.mode", 0);
 pref("app.update.download.backgroundInterval", 0);
 
-//@line 477 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#ifdef MOZ_OFFICIAL_BRANDING
+pref("app.update.interval", 86400);
+pref("app.update.url.manual", "http://www.mozilla.com/%LOCALE%/m/");
+pref("app.update.url.details", "http://www.mozilla.com/%LOCALE%/mobile/releases/");
+#else
 pref("app.update.interval", 28800);
 pref("app.update.url.manual", "http://www.mozilla.com/%LOCALE%/mobile/");
 pref("app.update.url.details", "http://www.mozilla.com/%LOCALE%/mobile/");
-//@line 482 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#endif
+#endif
 
 // replace newlines with spaces on paste into single-line text boxes
 pref("editor.singleLine.pasteNewlines", 2);
 
-//@line 495 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#ifdef MOZ_PLATFORM_MAEMO
+// update fonts for better readability
+pref("font.default.x-baltic", "SwissA");
+pref("font.default.x-central-euro", "SwissA");
+pref("font.default.x-cyrillic", "SwissA");
+pref("font.default.x-unicode", "SwissA");
+pref("font.default.x-user-def", "SwissA");
+pref("font.default.x-western", "SwissA");
+#endif
 
-//@line 497 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#ifdef MOZ_SERVICES_SYNC
 pref("browser.sync.enabled", true);
 
 // sync service
@@ -485,16 +529,18 @@ pref("services.sync.prefs.sync.lightweightThemes.usedThemes", true);
 pref("services.sync.prefs.sync.network.cookie.cookieBehavior", true);
 pref("services.sync.prefs.sync.permissions.default.image", true);
 pref("services.sync.prefs.sync.signon.rememberSignons", true);
-//@line 517 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#endif
 
 // threshold where a tap becomes a drag, in 1/240" reference pixels
 // The names of the preferences are to be in sync with nsEventStateManager.cpp
 pref("ui.dragThresholdX", 25);
 pref("ui.dragThresholdY", 25);
 
-//@line 526 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#if MOZ_PLATFORM_MAEMO == 6
+pref("layers.acceleration.disabled", false);
+#else
 pref("layers.acceleration.disabled", true);
-//@line 528 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#endif
 
 pref("notification.feature.enabled", true);
 
@@ -523,7 +569,56 @@ pref("dom.w3c_touch_events.enabled", true);
 pref("dom.w3c_touch_events.safetyX", 0); // escape borders in units of 1/240"
 pref("dom.w3c_touch_events.safetyY", 120); // escape borders in units of 1/240"
 
-//@line 606 "/home/vivien/Devel/tools/B2G/gecko/b2g/app/mobile.js"
+#ifdef MOZ_SAFE_BROWSING
+// Safe browsing does nothing unless this pref is set
+pref("browser.safebrowsing.enabled", true);
+
+// Prevent loading of pages identified as malware
+pref("browser.safebrowsing.malware.enabled", true);
+
+// Non-enhanced mode (local url lists) URL list to check for updates
+pref("browser.safebrowsing.provider.0.updateURL", "http://safebrowsing.clients.google.com/safebrowsing/downloads?client={moz:client}&appver={moz:version}&pver=2.2");
+
+pref("browser.safebrowsing.dataProvider", 0);
+
+// Does the provider name need to be localizable?
+pref("browser.safebrowsing.provider.0.name", "Google");
+pref("browser.safebrowsing.provider.0.keyURL", "https://sb-ssl.google.com/safebrowsing/newkey?client={moz:client}&appver={moz:version}&pver=2.2");
+pref("browser.safebrowsing.provider.0.reportURL", "http://safebrowsing.clients.google.com/safebrowsing/report?");
+pref("browser.safebrowsing.provider.0.gethashURL", "http://safebrowsing.clients.google.com/safebrowsing/gethash?client={moz:client}&appver={moz:version}&pver=2.2");
+
+// HTML report pages
+pref("browser.safebrowsing.provider.0.reportGenericURL", "http://{moz:locale}.phish-generic.mozilla.com/?hl={moz:locale}");
+pref("browser.safebrowsing.provider.0.reportErrorURL", "http://{moz:locale}.phish-error.mozilla.com/?hl={moz:locale}");
+pref("browser.safebrowsing.provider.0.reportPhishURL", "http://{moz:locale}.phish-report.mozilla.com/?hl={moz:locale}");
+pref("browser.safebrowsing.provider.0.reportMalwareURL", "http://{moz:locale}.malware-report.mozilla.com/?hl={moz:locale}");
+pref("browser.safebrowsing.provider.0.reportMalwareErrorURL", "http://{moz:locale}.malware-error.mozilla.com/?hl={moz:locale}");
+
+// FAQ URLs
+pref("browser.safebrowsing.warning.infoURL", "http://www.mozilla.com/%LOCALE%/%APP%/phishing-protection/");
+pref("browser.geolocation.warning.infoURL", "http://www.mozilla.com/%LOCALE%/%APP%/geolocation/");
+
+// Name of the about: page contributed by safebrowsing to handle display of error
+// pages on phishing/malware hits.  (bug 399233)
+pref("urlclassifier.alternate_error_page", "blocked");
+
+// The number of random entries to send with a gethash request.
+pref("urlclassifier.gethashnoise", 4);
+
+// The list of tables that use the gethash request to confirm partial results.
+pref("urlclassifier.gethashtables", "goog-phish-shavar,goog-malware-shavar");
+
+// If an urlclassifier table has not been updated in this number of seconds,
+// a gethash request will be forced to check that the result is still in
+// the database.
+pref("urlclassifier.confirm-age", 2700);
+
+// Maximum size of the sqlite3 cache during an update, in bytes
+pref("urlclassifier.updatecachemax", 4194304);
+
+// URL for checking the reason for a malware warning.
+pref("browser.safebrowsing.malware.reportURL", "http://safebrowsing.clients.google.com/safebrowsing/diagnostic?client=%NAME%&hl=%LOCALE%&site=");
+#endif
 
 // True if this is the first time we are showing about:firstrun
 pref("browser.firstrun.show.uidiscovery", true);
