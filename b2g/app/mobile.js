@@ -588,3 +588,8 @@ pref("browser.dom.window.dump.enabled", false);
 // from other dirs as webgl textures and more.  Remove me when we have
 // installable apps or wifi support.
 pref("security.fileuri.strict_origin_policy", false);
+
+// Temporarily force-enable GL compositing.  This is default-disabled
+// deep within the bowels of the widgetry system.  Remove me when GL
+// compositing isn't default disabled in widget/src/android.
+pref("layers.acceleration.force-enabled", true);
