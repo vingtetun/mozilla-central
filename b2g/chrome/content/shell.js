@@ -36,24 +36,40 @@
 
 const Cc = Components.classes;
 const Ci = Components.interfaces;
+const CC = Components.Constructor;
 
 // The default homescreen url to use if there is no B2G_HOMESCREEN
 // environment variable or if it is empty.
-const kDefaultHomeScreen = "file:///data/local/homescreen.html";
+const kDefaultHomeScreen = "/data/local/homescreen.html";
+const kDefaultSystemHomeScreen = "/system/home/homescreen.html";
+
+var LocalFile = CC("@mozilla.org/file/local;1", "nsILocalFile", "initWithPath");
 
 var shell = {
   get home() {
     delete this.home;
     return this.home = document.getElementById("homescreen");
   },
-  start: function shell_init() {
-    window.controllers.appendController(this);
 
+  get homeSrc() {
     let homeSrc = Cc["@mozilla.org/process/environment;1"]
                     .getService(Ci.nsIEnvironment)
                     .get("B2G_HOMESCREEN");
+    if (homeSrc)
+      return homeSrc;
+
+    let file = new LocalFile(kDefaultHomeScreen);
+    if (file.exists())
+      return "file://" + kDefaultHomeScreen;
+
+    return "file://" + kDefaultSystemHomeScreen;
+  },
+
+  start: function shell_init() {
+    window.controllers.appendController(this);
+
     let browser = this.home;
-    browser.homePage = homeSrc || kDefaultHomeScreen;
+    browser.homePage = this.homeSrc;
     browser.goHome();
   },
 
