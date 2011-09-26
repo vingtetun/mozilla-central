@@ -121,8 +121,11 @@ class GeckoSurfaceView
 
         Resources res = getResources();
 
+// Not used on B2G
+/*
         File filesDir = new File(GeckoApp.sGREDir, "files");
         if (filesDir.exists() == false) {
+*/
             // Just show the simple splash screen for "new profile" startup
             c.drawColor(res.getColor(R.color.splash_background));
             Drawable drawable = res.getDrawable(R.drawable.splash);
@@ -139,6 +142,7 @@ class GeckoSurfaceView
             p.setAntiAlias(true);
             p.setColor(res.getColor(R.color.splash_msgfont));
             c.drawText(res.getString(R.string.splash_firstrun), width / 2, y + h + 16, p);
+/*
         } else {
             // Show the static UI for normal startup
             DisplayMetrics metrics = new DisplayMetrics();
@@ -180,6 +184,7 @@ class GeckoSurfaceView
                 c.drawText(url, urlOffsetX, urlOffsetY, p);
             }
         }
+*/
         holder.unlockCanvasAndPost(c);
     }
 
