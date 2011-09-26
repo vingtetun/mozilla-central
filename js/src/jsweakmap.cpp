@@ -78,12 +78,6 @@ WeakMapBase::sweepAll(JSTracer *tracer)
 
 } /* namespace js */
 
-bool
-JSObject::isWeakMap() const
-{
-    return getClass() == &WeakMapClass;
-}
-
 typedef WeakMap<JSObject *, Value> ObjectValueMap;
 
 static ObjectValueMap *
@@ -264,30 +258,26 @@ WeakMap_construct(JSContext *cx, uintN argc, Value *vp)
     return true;
 }
 
-namespace js {
-
-Class WeakMapClass = {
+Class js::WeakMapClass = {
     "WeakMap",
     JSCLASS_HAS_PRIVATE |
     JSCLASS_HAS_CACHED_PROTO(JSProto_WeakMap),
-    PropertyStub,         /* addProperty */
-    PropertyStub,         /* delProperty */
-    PropertyStub,         /* getProperty */
-    StrictPropertyStub,   /* setProperty */
-    EnumerateStub,
-    ResolveStub,
-    ConvertStub,
+    JS_PropertyStub,         /* addProperty */
+    JS_PropertyStub,         /* delProperty */
+    JS_PropertyStub,         /* getProperty */
+    JS_StrictPropertyStub,   /* setProperty */
+    JS_EnumerateStub,
+    JS_ResolveStub,
+    JS_ConvertStub,
     WeakMap_finalize,
-    NULL,                 /* reserved0   */
-    NULL,                 /* checkAccess */
-    NULL,                 /* call        */
-    NULL,                 /* construct   */
-    NULL,                 /* xdrObject   */
-    NULL,                 /* hasInstance */
+    NULL,                    /* reserved0   */
+    NULL,                    /* checkAccess */
+    NULL,                    /* call        */
+    NULL,                    /* construct   */
+    NULL,                    /* xdrObject   */
+    NULL,                    /* hasInstance */
     WeakMap_mark
 };
-
-}
 
 static JSFunctionSpec weak_map_methods[] = {
     JS_FN("has",    WeakMap_has, 1, 0),

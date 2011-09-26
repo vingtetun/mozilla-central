@@ -4945,11 +4945,13 @@ nsSVGFELightingElement::Filter(nsSVGFilterInstance *instance,
                      x, y, surfaceScale);
 
       if (pointLight || spotLight) {
-        float Z =
-          surfaceScale * sourceData[index + GFX_ARGB32_OFFSET_A] / 255;
+        gfxPoint pt = instance->FilterSpaceToUserSpace(
+                gfxPoint(x + instance->GetSurfaceRect().x,
+                         y + instance->GetSurfaceRect().y));
+        float Z = surfaceScale * sourceData[index + GFX_ARGB32_OFFSET_A] / 255;
 
-        L[0] = lightPos[0] - x;
-        L[1] = lightPos[1] - y;
+        L[0] = lightPos[0] - pt.x;
+        L[1] = lightPos[1] - pt.y;
         L[2] = lightPos[2] - Z;
         NORMALIZE(L);
       }
@@ -5435,7 +5437,7 @@ nsSVGFEImageElement::LoadSVGImage(PRBool aForce, PRBool aNotify)
     NS_MakeAbsoluteURI(href, href, baseURI);
 
   // Make sure we don't get in a recursive death-spiral
-  nsIDocument* doc = GetOurDocument();
+  nsIDocument* doc = GetOwnerDoc();
   if (doc) {
     nsCOMPtr<nsIURI> hrefAsURI;
     if (NS_SUCCEEDED(StringToURI(href, doc, getter_AddRefs(hrefAsURI)))) {

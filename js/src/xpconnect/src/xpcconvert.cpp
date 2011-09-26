@@ -1827,7 +1827,7 @@ XPCConvert::JSErrorToXPCException(XPCCallContext& ccx,
                                (const PRUnichar *)report->uclinebuf, report->lineno,
                                report->uctokenptr - report->uclinebuf, report->flags,
                                "XPConnect JavaScript",
-                               nsJSUtils::GetCurrentlyRunningCodeWindowID(ccx.GetJSContext()));
+                               nsJSUtils::GetCurrentlyRunningCodeInnerWindowID(ccx.GetJSContext()));
     }
 
     if(data)
@@ -2119,7 +2119,8 @@ XPCConvert::JSArray2Native(XPCCallContext& ccx, void** d, jsval s,
 #define POPULATE(_mode, _t)                                                  \
     PR_BEGIN_MACRO                                                           \
         cleanupMode = _mode;                                                 \
-        if (capacity > PR_UINT32_MAX / sizeof(_t) ||                         \
+        size_t max = PR_UINT32_MAX / sizeof(_t);                             \
+        if (capacity > max ||                                                \
             nsnull == (array = nsMemory::Alloc(capacity * sizeof(_t))))      \
         {                                                                    \
             if(pErr)                                                         \

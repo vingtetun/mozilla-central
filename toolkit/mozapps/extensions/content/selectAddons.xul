@@ -52,7 +52,6 @@
         style="&upgrade.style;" id="select-window">
 
   <script type="application/javascript" src="chrome://mozapps/content/extensions/selectAddons.js"/>
-  <stringbundle id="app-strings" src="chrome://branding/locale/brand.properties"/>
   <stringbundle id="strings" src="chrome://mozapps/locale/extensions/selectAddons.properties"/>
 
   <deck id="view-deck" flex="1" align="stretch" pack="stretch">
@@ -148,8 +147,7 @@
   </deck>
 
   <hbox id="footer" align="center">
-    <label id="footer-label">&footer.label;</label>
-    <spacer flex="1"/>
+    <label id="footer-label" flex="1">&footer.label;</label>
     <button id="cancel" label="&cancel.label;" oncommand="window.close()"/>
     <button id="back" label="&back.label;" oncommand="gView.back()" hidden="true"/>
     <button id="next" label="&next.label;" oncommand="gView.next()" hidden="true"/>

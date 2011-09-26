@@ -180,7 +180,7 @@ let gInitialPages = [
 ];
 
 #include browser-fullZoom.js
-#include inspector.js
+#include ../../devtools/highlighter/inspector.js
 #include browser-places.js
 #include browser-tabPreviews.js
 #include browser-tabview.js
@@ -1676,8 +1676,7 @@ function delayedStartup(isLoadingBlank, mustLoadSidebar) {
   TabView.init();
 
   // Enable Inspector?
-  let enabled = gPrefService.getBoolPref(InspectorUI.prefEnabledName);
-  if (enabled) {
+  if (InspectorUI.enabled) {
     document.getElementById("menu_pageinspect").hidden = false;
     document.getElementById("Tools:Inspect").removeAttribute("disabled");
 #ifdef MENUBAR_CAN_AUTOHIDE
@@ -2213,8 +2212,12 @@ var gLastOpenDirectory = {
     return this._lastDir;
   },
   set path(val) {
-    if (!val || !val.exists() || !val.isDirectory())
+    try {
+      if (!val || !val.isDirectory())
+        return;
+    } catch(e) {
       return;
+    }
     this._lastDir = val.clone();
 
     // Don't save the last open directory pref inside the Private Browsing mode
@@ -2239,8 +2242,11 @@ function BrowserOpenFileWindow()
     fp.displayDirectory = gLastOpenDirectory.path;
 
     if (fp.show() == nsIFilePicker.returnOK) {
-      if (fp.file && fp.file.exists())
-        gLastOpenDirectory.path = fp.file.parent.QueryInterface(Ci.nsILocalFile);
+      try {
+        if (fp.file)
+          gLastOpenDirectory.path = fp.file.parent.QueryInterface(Ci.nsILocalFile);
+      } catch(e) {
+      }
       openTopWin(fp.fileURL.spec);
     }
   } catch (ex) {
@@ -2502,6 +2508,7 @@ function URLBarSetURI(aURI) {
   }
 
   gURLBar.value = value;
+  gURLBar.valueIsTyped = !valid;
   SetPageProxyState(valid ? "valid" : "invalid");
 }
 
@@ -6285,13 +6292,14 @@ var IndexedDBPromptHelper = {
     var contentDocument = contentWindow.document;
     var browserWindow =
       OfflineApps._getBrowserWindowForContentWindow(contentWindow);
-    var browser =
-      OfflineApps._getBrowserForContentWindow(browserWindow, contentWindow);
 
-    if (!browser) {
+    if (browserWindow != window) {
       // Must belong to some other window.
       return;
     }
+
+    var browser =
+      OfflineApps._getBrowserForContentWindow(browserWindow, contentWindow);
 
     var host = contentDocument.documentURIObject.asciiHost;
 
@@ -7330,7 +7338,8 @@ var FeedHandler = {
    * a page is loaded or the user switches tabs to a page that has feeds.
    */
   updateFeeds: function() {
-    clearTimeout(this._updateFeedTimeout);
+    if (this._updateFeedTimeout)
+      clearTimeout(this._updateFeedTimeout);
 
     var feeds = gBrowser.selectedBrowser.feeds;
     var haveFeeds = feeds && feeds.length > 0;

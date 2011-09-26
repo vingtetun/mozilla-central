@@ -72,7 +72,17 @@ pref("toolkit.zoomManager.zoomValues", ".2,.3,.5,.67,.8,.9,1,1.1,1.2,1.33,1.5,1.
 
 // Device pixel to CSS px ratio, in percent. Set to -1 to calculate based on display density.
 pref("browser.viewport.scaleRatio", -1);
+pref("browser.viewport.desktopWidth", 980);
 
+#ifndef ANDROID
+#ifndef MOZ_PLATFORM_MAEMO
+// On desktop builds, simulate an MDPI tablet by default.
+pref("layout.css.dpi", 160);
+#else
+// Maemo X11 lies about its dpi
+pref("layout.css.dpi", 240);
+#endif
+#endif
 /* allow scrollbars to float above chrome ui */
 pref("ui.scrollbarsCanOverlapContent", 1);
 
@@ -216,6 +226,7 @@ pref("extensions.getAddons.get.url", "https://services.addons.mozilla.org/%LOCAL
 
 /* preference for the locale picker */
 pref("extensions.getLocales.get.url", "");
+pref("extensions.compatability.locales.buildid", "0");
 
 /* blocklist preferences */
 pref("extensions.blocklist.enabled", true);
@@ -384,6 +395,9 @@ pref("content.sink.pending_event_mode", 0);
 pref("content.sink.perf_deflect_count", 1000000);
 pref("content.sink.perf_parse_time", 50000000);
 
+// Disable methodjit in chrome to save memory
+pref("javascript.options.methodjit.chrome",  false);
+
 pref("javascript.options.mem.high_water_mark", 32);
 
 // Disable the JS engine's gc on memory pressure, since we do one in the mobile
@@ -396,7 +410,7 @@ pref("dom.max_script_run_time", 20);
 // JS error console
 pref("devtools.errorconsole.enabled", false);
 
-pref("browser.ui.layout.tablet", 0); // on: 1, off: 0, auto: -1
+pref("browser.ui.layout.tablet", -1); // on: 1, off: 0, auto: -1
 
 // kinetic tweakables
 pref("browser.ui.kinetic.updateInterval", 16);
@@ -448,6 +462,7 @@ pref("app.support.baseURL", "http://support.mozilla.com/mobile");
 pref("app.feedbackURL", "http://input.mozilla.com/feedback/");
 pref("app.privacyURL", "http://www.mozilla.com/%LOCALE%/m/privacy.html");
 pref("app.creditsURL", "http://www.mozilla.org/credits/");
+pref("app.channelURL", "http://www.mozilla.org/%LOCALE%/firefox/channel/");
 #if MOZ_UPDATE_CHANNEL == beta
 pref("app.featuresURL", "http://www.mozilla.com/%LOCALE%/mobile/beta/features/");
 pref("app.faqURL", "http://www.mozilla.com/%LOCALE%/mobile/beta/faq/");
@@ -539,8 +554,6 @@ pref("font.default.x-western", "SwissA");
 #endif
 
 #ifdef MOZ_SERVICES_SYNC
-pref("browser.sync.enabled", true);
-
 // sync service
 pref("services.sync.client.type", "mobile");
 pref("services.sync.registerEngines", "Tab,Bookmarks,Form,History,Password,Prefs");
@@ -557,6 +570,7 @@ pref("services.sync.prefs.sync.lightweightThemes.isThemeSelected", true);
 pref("services.sync.prefs.sync.lightweightThemes.usedThemes", true);
 pref("services.sync.prefs.sync.network.cookie.cookieBehavior", true);
 pref("services.sync.prefs.sync.permissions.default.image", true);
+pref("services.sync.prefs.sync.privacy.donottrackheader.enabled", true);
 pref("services.sync.prefs.sync.signon.rememberSignons", true);
 #endif
 
@@ -566,6 +580,8 @@ pref("ui.dragThresholdX", 25);
 pref("ui.dragThresholdY", 25);
 
 #if MOZ_PLATFORM_MAEMO == 6
+pref("layers.acceleration.disabled", false);
+#elifdef ANDROID
 pref("layers.acceleration.disabled", false);
 #else
 pref("layers.acceleration.disabled", true);
@@ -652,9 +668,6 @@ pref("browser.safebrowsing.malware.reportURL", "http://safebrowsing.clients.goog
 // True if this is the first time we are showing about:firstrun
 pref("browser.firstrun.show.uidiscovery", true);
 pref("browser.firstrun.show.localepicker", true);
-
-// initiated by a user
-pref("content.ime.strict_policy", true);
 
 // True if you always want dump() to work
 //

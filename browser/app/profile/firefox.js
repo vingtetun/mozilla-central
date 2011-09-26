@@ -308,7 +308,7 @@ pref("browser.urlbar.trimURLs", true);
 // the Content-Disposition filename) before giving up and falling back to 
 // picking a filename without that info in hand so that the user sees some
 // feedback from their action.
-pref("browser.download.saveLinkAsFilenameTimeout", 1000);
+pref("browser.download.saveLinkAsFilenameTimeout", 4000);
 
 pref("browser.download.useDownloadDir", true);
 
@@ -734,19 +734,11 @@ pref("urlclassifier.gethashtables", "goog-phish-shavar,goog-malware-shavar");
 // the database.
 pref("urlclassifier.confirm-age", 2700);
 
-#ifdef MOZ_WIDGET_GTK2
-#define RESTRICT_CACHEMAX
-#endif
-#ifdef XP_OS2
-#define RESTRICT_CACHEMAX
-#endif
-
 // Maximum size of the sqlite3 cache during an update, in bytes
-#ifdef RESTRICT_CACHEMAX
-pref("urlclassifier.updatecachemax", 104857600);
-#else
-pref("urlclassifier.updatecachemax", -1);
-#endif
+pref("urlclassifier.updatecachemax", 41943040);
+
+// Maximum size of the sqlite3 cache for lookups, in bytes
+pref("urlclassifier.lookupcachemax", 1048576);
 
 // URL for checking the reason for a malware warning.
 pref("browser.safebrowsing.malware.reportURL", "http://safebrowsing.clients.google.com/safebrowsing/diagnostic?client=%NAME%&hl=%LOCALE%&site=");
@@ -797,12 +789,6 @@ pref("accessibility.blockautorefresh", false);
 
 // Whether history is enabled or not.
 pref("places.history.enabled", true);
-
-// The percentage of system memory that the Places database can use.  Out of the
-// allowed cache size it will at most use the size of the database file.
-// Changes to this value are effective after an application restart.
-// Acceptable values are between 0 and 50.
-pref("places.database.cache_to_memory_percentage", 6);
 
 // the (maximum) number of the recent visits to sample
 // when calculating frecency
@@ -1014,6 +1000,9 @@ pref("devtools.errorconsole.enabled", false);
 
 // Enable the Inspector
 pref("devtools.inspector.enabled", true);
+
+// Enable the style inspector
+pref("devtools.styleinspector.enabled", true);
 
 // Enable the Scratchpad tool.
 pref("devtools.scratchpad.enabled", true);

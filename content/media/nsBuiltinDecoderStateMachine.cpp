@@ -59,7 +59,7 @@ extern PRLogModuleInfo* gBuiltinDecoderLog;
 // Wait this number of seconds when buffering, then leave and play
 // as best as we can if the required amount of data hasn't been
 // retrieved.
-#define BUFFERING_WAIT 30
+static const PRUint32 BUFFERING_WAIT = 30;
 
 // The amount of data to retrieve during buffering is computed based
 // on the download rate. BUFFERING_MIN_RATE is the minimum download
@@ -202,6 +202,7 @@ nsBuiltinDecoderStateMachine::nsBuiltinDecoderStateMachine(nsBuiltinDecoder* aDe
   mStartTime(-1),
   mEndTime(-1),
   mSeekTime(0),
+  mFragmentEndTime(-1),
   mReader(aReader),
   mCurrentFrameTime(0),
   mAudioStartTime(-1),
@@ -853,7 +854,8 @@ void nsBuiltinDecoderStateMachine::UpdatePlaybackPosition(PRInt64 aTime)
 {
   UpdatePlaybackPositionInternal(aTime);
 
-  if (!mPositionChangeQueued) {
+  PRBool fragmentEnded = mFragmentEndTime >= 0 && GetMediaTime() >= mFragmentEndTime;
+  if (!mPositionChangeQueued || fragmentEnded) {
     mPositionChangeQueued = PR_TRUE;
     nsCOMPtr<nsIRunnable> event =
       NS_NewRunnableMethod(mDecoder, &nsBuiltinDecoder::PlaybackPositionChanged);
@@ -862,6 +864,10 @@ void nsBuiltinDecoderStateMachine::UpdatePlaybackPosition(PRInt64 aTime)
 
   // Notify DOM of any queued up audioavailable events
   mEventManager.DispatchPendingEvents(GetMediaTime());
+
+  if (fragmentEnded) {
+    StopPlayback();
+  }
 }
 
 void nsBuiltinDecoderStateMachine::ClearPositionChangeFlag()
@@ -933,6 +939,13 @@ void nsBuiltinDecoderStateMachine::SetEndTime(PRInt64 aEndTime)
   mDecoder->GetReentrantMonitor().AssertCurrentThreadIn();
 
   mEndTime = aEndTime;
+}
+
+void nsBuiltinDecoderStateMachine::SetFragmentEndTime(PRInt64 aEndTime)
+{
+  mDecoder->GetReentrantMonitor().AssertCurrentThreadIn();
+
+  mFragmentEndTime = aEndTime < 0 ? aEndTime : aEndTime + mStartTime;
 }
 
 void nsBuiltinDecoderStateMachine::SetSeekable(PRBool aSeekable)
@@ -1376,15 +1389,20 @@ void nsBuiltinDecoderStateMachine::DecodeSeek()
 // Runnable to dispose of the decoder and state machine on the main thread.
 class nsDecoderDisposeEvent : public nsRunnable {
 public:
-  nsDecoderDisposeEvent(already_AddRefed<nsBuiltinDecoder> aDecoder)
-    : mDecoder(aDecoder) {}
+  nsDecoderDisposeEvent(already_AddRefed<nsBuiltinDecoder> aDecoder,
+                        already_AddRefed<nsBuiltinDecoderStateMachine> aStateMachine)
+    : mDecoder(aDecoder), mStateMachine(aStateMachine) {}
   NS_IMETHOD Run() {
     NS_ASSERTION(NS_IsMainThread(), "Must be on main thread.");
+    mStateMachine->ReleaseDecoder();
+    mDecoder->ReleaseStateMachine();
+    mStateMachine = nsnull;
     mDecoder = nsnull;
     return NS_OK;
   }
 private:
   nsRefPtr<nsBuiltinDecoder> mDecoder;
+  nsCOMPtr<nsBuiltinDecoderStateMachine> mStateMachine;
 };
 
 // Runnable which dispatches an event to the main thread to dispose of the
@@ -1393,15 +1411,17 @@ private:
 // finished running.
 class nsDispatchDisposeEvent : public nsRunnable {
 public:
-  nsDispatchDisposeEvent(already_AddRefed<nsBuiltinDecoder> aDecoder)
-    : mDecoder(aDecoder) {}
+  nsDispatchDisposeEvent(nsBuiltinDecoder* aDecoder,
+                         nsBuiltinDecoderStateMachine* aStateMachine)
+    : mDecoder(aDecoder), mStateMachine(aStateMachine) {}
   NS_IMETHOD Run() {
-    NS_DispatchToMainThread(new nsDecoderDisposeEvent(mDecoder.forget()),
-                            NS_DISPATCH_NORMAL);
+    NS_DispatchToMainThread(new nsDecoderDisposeEvent(mDecoder.forget(),
+                                                      mStateMachine.forget()));
     return NS_OK;
   }
 private:
   nsRefPtr<nsBuiltinDecoder> mDecoder;
+  nsCOMPtr<nsBuiltinDecoderStateMachine> mStateMachine;
 };
 
 nsresult nsBuiltinDecoderStateMachine::RunStateMachine()
@@ -1419,7 +1439,7 @@ nsresult nsBuiltinDecoderStateMachine::RunStateMachine()
       StopAudioThread();
       StopDecodeThread();
       NS_ASSERTION(mState == DECODER_STATE_SHUTDOWN,
-                   "How did we escape from the shutdown state???");
+                   "How did we escape from the shutdown state?");
       // We must daisy-chain these events to destroy the decoder. We must
       // destroy the decoder on the main thread, but we can't destroy the
       // decoder while this thread holds the decoder monitor. We can't
@@ -1433,8 +1453,7 @@ nsresult nsBuiltinDecoderStateMachine::RunStateMachine()
       // finished and released its monitor/references. That event then will
       // dispatch an event to the main thread to release the decoder and
       // state machine.
-      NS_DispatchToCurrentThread(
-        new nsDispatchDisposeEvent(mDecoder.forget()));
+      NS_DispatchToCurrentThread(new nsDispatchDisposeEvent(mDecoder, this));
       return NS_OK;
     }
 
@@ -1706,7 +1725,7 @@ void nsBuiltinDecoderStateMachine::AdvanceFrame()
 
   // We've got enough data to keep playing until at least the next frame.
   // Start playing now if need be.
-  if (!IsPlaying()) {
+  if (!IsPlaying() && ((mFragmentEndTime >= 0 && clock_time < mFragmentEndTime) || mFragmentEndTime < 0)) {
     StartPlayback();
   }
 

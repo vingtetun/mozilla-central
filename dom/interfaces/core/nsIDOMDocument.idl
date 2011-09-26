@@ -44,6 +44,10 @@
 
 #include "nsIDOMNode.idl"
 
+%{ C++
+#include "jspubtd.h"
+%}
+
 interface nsIDOMNodeIterator;
 interface nsIDOMNodeFilter;
 interface nsIDOMTreeWalker;
@@ -63,7 +67,7 @@ interface nsIDOMCaretPosition;
  * http://dvcs.w3.org/hg/domcore/raw-file/tip/Overview.html
  */
 
-[scriptable, uuid(d19897dc-948a-42e7-8ac6-d8a0bd141b85)]
+[scriptable, uuid(C54536AF-C238-4D8B-A339-54E2A0649FF5)]
 interface nsIDOMDocument : nsIDOMNode
 {
   readonly attribute nsIDOMDocumentType         doctype;
@@ -371,4 +375,33 @@ interface nsIDOMDocument : nsIDOMNode
                           in nsIDOMElement aImageElement);
 
   nsIDOMCaretPosition caretPositionFromPoint(in float x, in float y);
+  
+  /**
+   * Element which is currently the full-screen element as per the DOM
+   * full-screen api.
+   *
+   * @see <https://wiki.mozilla.org/index.php?title=Gecko:FullScreenAPI>
+   */
+  readonly attribute nsIDOMHTMLElement mozFullScreenElement;
+
+  /**
+   * Causes the document to leave DOM full-screen mode, if it's in
+   * full-screen mode, as per the DOM full-screen api.
+   *
+   * @see <https://wiki.mozilla.org/index.php?title=Gecko:FullScreenAPI>
+   */
+  void mozCancelFullScreen();   
+  
+  /**
+   * Denotes whether this document is in DOM full-screen mode, as per the DOM
+   * full-screen api.
+   *
+   * @see <https://wiki.mozilla.org/index.php?title=Gecko:FullScreenAPI>
+   */
+  readonly attribute boolean mozFullScreen;  
+
+  /**
+   * Inline event handler for readystatechange events.
+   */
+  [implicit_jscontext] attribute jsval onreadystatechange;
 };

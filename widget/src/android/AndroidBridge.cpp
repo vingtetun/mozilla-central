@@ -84,7 +84,7 @@ AndroidBridge::ConstructBridge(JNIEnv *jEnv,
      * to call dlclose() while we're already inside dlclose().
      * Conveniently, NSS has an env var that can prevent it from unloading.
      */
-    putenv(strdup("NSS_DISABLE_UNLOAD=1"));
+    putenv("NSS_DISABLE_UNLOAD=1"); 
 
     sBridge = new AndroidBridge();
     if (!sBridge->Init(jEnv, jGeckoAppShellClass)) {
@@ -149,6 +149,7 @@ AndroidBridge::Init(JNIEnv *jEnv,
     jGetIconForExtension = (jmethodID) jEnv->GetStaticMethodID(jGeckoAppShellClass, "getIconForExtension", "(Ljava/lang/String;I)[B");
     jCreateShortcut = (jmethodID) jEnv->GetStaticMethodID(jGeckoAppShellClass, "createShortcut", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
     jGetShowPasswordSetting = (jmethodID) jEnv->GetStaticMethodID(jGeckoAppShellClass, "getShowPasswordSetting", "()Z");
+    jPostToJavaThread = (jmethodID) jEnv->GetStaticMethodID(jGeckoAppShellClass, "postToJavaThread", "(Z)V");
 
     jEGLContextClass = (jclass) jEnv->NewGlobalRef(jEnv->FindClass("javax/microedition/khronos/egl/EGLContext"));
     jEGL10Class = (jclass) jEnv->NewGlobalRef(jEnv->FindClass("javax/microedition/khronos/egl/EGL10"));
@@ -169,8 +170,14 @@ AndroidBridge::Init(JNIEnv *jEnv,
 JNIEnv *
 AndroidBridge::AttachThread(PRBool asDaemon)
 {
+    // If we already have a env, return it
+    JNIEnv *jEnv = NULL;
+    mJavaVM->GetEnv((void**) &jEnv, JNI_VERSION_1_2);
+    if (jEnv)
+        return jEnv;
+
     ALOG_BRIDGE("AndroidBridge::AttachThread");
-    JNIEnv *jEnv = (JNIEnv*) PR_GetThreadPrivate(sJavaEnvThreadIndex);
+    jEnv = (JNIEnv*) PR_GetThreadPrivate(sJavaEnvThreadIndex);
     if (jEnv)
         return jEnv;
 
@@ -194,6 +201,8 @@ AndroidBridge::AttachThread(PRBool asDaemon)
     }
 
     PR_SetThreadPrivate(sJavaEnvThreadIndex, jEnv);
+
+    PR_NewThreadPrivateIndex(&sJavaEnvThreadIndex, JavaThreadDetachFunc);
 
     return jEnv;
 }
@@ -494,7 +503,7 @@ AndroidBridge::GetMimeTypeFromExtensions(const nsACString& aFileExt, nsCString& 
 }
 
 void
-AndroidBridge::GetExtensionFromMimeType(const nsCString& aMimeType, nsACString& aFileExt)
+AndroidBridge::GetExtensionFromMimeType(const nsACString& aMimeType, nsACString& aFileExt)
 {
     ALOG_BRIDGE("AndroidBridge::GetExtensionFromMimeType");
 
@@ -539,7 +548,7 @@ AndroidBridge::SetClipboardText(const nsAString& aText)
     AutoLocalJNIFrame jniFrame;
     jstring jstr = mJNIEnv->NewString(nsPromiseFlatString(aText).get(),
                                       aText.Length());
-    mJNIEnv->CallStaticObjectMethod(mGeckoAppShellClass, jSetClipboardText, jstr);
+    mJNIEnv->CallStaticVoidMethod(mGeckoAppShellClass, jSetClipboardText, jstr);
 }
 
 bool
@@ -560,7 +569,7 @@ void
 AndroidBridge::EmptyClipboard()
 {
     ALOG_BRIDGE("AndroidBridge::EmptyClipboard");
-    mJNIEnv->CallStaticObjectMethod(mGeckoAppShellClass, jSetClipboardText, nsnull);
+    mJNIEnv->CallStaticVoidMethod(mGeckoAppShellClass, jSetClipboardText, nsnull);
 }
 
 void
@@ -888,9 +897,12 @@ mozilla_AndroidBridge_AttachThread(PRBool asDaemon)
     return AndroidBridge::Bridge()->AttachThread(asDaemon);
 }
 
-extern "C" JNIEnv * GetJNIForThread()
-{
-    return mozilla::AndroidBridge::JNIForThread();
+extern "C" {
+    __attribute__ ((visibility("default")))
+    JNIEnv * GetJNIForThread()
+    {
+        return mozilla::AndroidBridge::JNIForThread();
+    }
 }
 
 jclass GetGeckoAppShellClass()
@@ -926,6 +938,45 @@ AndroidBridge::CreateShortcut(const nsAString& aTitle, const nsAString& aURI, co
   mJNIEnv->CallStaticVoidMethod(mGeckoAppShellClass, jCreateShortcut, jstrTitle, jstrURI, jstrIconData, jstrIntent);
 }
 
+void
+AndroidBridge::PostToJavaThread(nsIRunnable* aRunnable, PRBool aMainThread)
+{
+    __android_log_print(ANDROID_LOG_INFO, "GeckoBridge", "%s", __PRETTY_FUNCTION__);
+    JNIEnv* env = AndroidBridge::AttachThread(false);
+    if (!env) {
+        __android_log_print(ANDROID_LOG_INFO, "GeckoBridge", "no jni env in %s!!", __PRETTY_FUNCTION__);
+        return;
+    }
+    mRunnableQueue.AppendObject(aRunnable);
+    env->CallStaticVoidMethod(mGeckoAppShellClass, jPostToJavaThread, (jboolean)aMainThread);
+
+    jthrowable ex = env->ExceptionOccurred();
+    if (ex) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+    }
+    __android_log_print(ANDROID_LOG_INFO, "GeckoBridge", "leaving %s", __PRETTY_FUNCTION__);
+}
+
+void
+AndroidBridge::ExecuteNextRunnable()
+{
+    __android_log_print(ANDROID_LOG_INFO, "GeckoBridge", "%s", __PRETTY_FUNCTION__);
+
+    JNIEnv* env = AndroidBridge::AttachThread(false);
+    if (!env) {
+        __android_log_print(ANDROID_LOG_INFO, "GeckoBridge", "no jni env in %s!!", __PRETTY_FUNCTION__);
+        return;
+    }
+
+    if (mRunnableQueue.Count() > 0) {
+        nsIRunnable* r = mRunnableQueue[0];
+        __android_log_print(ANDROID_LOG_INFO, "GeckoBridge", "going to run %p", r);
+        r->Run();
+        mRunnableQueue.RemoveObjectAt(0);
+    }
+    __android_log_print(ANDROID_LOG_INFO, "GeckoBridge", "leaving %s", __PRETTY_FUNCTION__);
+}
 bool
 AndroidBridge::HasNativeBitmapAccess()
 {

@@ -53,6 +53,7 @@
 #include "nsIHTMLEditor.h"
 
 #include "nsIComponentManager.h"
+#include "nsIContentPrefService.h"
 #include "nsServiceManagerUtils.h"
 #include "nsIChromeRegistry.h"
 #include "nsString.h"
@@ -80,6 +81,136 @@ class UpdateDictionnaryHolder {
     }
 };
 
+#define CPS_PREF_NAME NS_LITERAL_STRING("spellcheck.lang")
+
+class LastDictionary {
+public:
+  /**
+   * Store current dictionary for editor document url. Use content pref
+   * service.
+   */
+  NS_IMETHOD StoreCurrentDictionary(nsIEditor* aEditor, const nsAString& aDictionary);
+
+  /**
+   * Get last stored current dictionary for editor document url.
+   */
+  NS_IMETHOD FetchLastDictionary(nsIEditor* aEditor, nsAString& aDictionary);
+
+  /**
+   * Forget last current dictionary stored for editor document url.
+   */
+  NS_IMETHOD ClearCurrentDictionary(nsIEditor* aEditor);
+
+  /**
+   * get uri of editor's document.
+   *
+   */
+  static nsresult GetDocumentURI(nsIEditor* aEditor, nsIURI * *aURI);
+};
+
+// static
+nsresult
+LastDictionary::GetDocumentURI(nsIEditor* aEditor, nsIURI * *aURI)
+{
+  NS_ENSURE_ARG_POINTER(aEditor);
+  NS_ENSURE_ARG_POINTER(aURI);
+
+  nsCOMPtr<nsIDOMDocument> domDoc;
+  aEditor->GetDocument(getter_AddRefs(domDoc));
+  NS_ENSURE_TRUE(domDoc, NS_ERROR_FAILURE);
+
+  nsCOMPtr<nsIDocument> doc = do_QueryInterface(domDoc);
+  NS_ENSURE_TRUE(doc, NS_ERROR_FAILURE);
+
+  nsCOMPtr<nsIURI> docUri = doc->GetDocumentURI();
+  NS_ENSURE_TRUE(docUri, NS_ERROR_FAILURE);
+
+  *aURI = docUri;
+  NS_ADDREF(*aURI);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+LastDictionary::FetchLastDictionary(nsIEditor* aEditor, nsAString& aDictionary)
+{
+  NS_ENSURE_ARG_POINTER(aEditor);
+
+  nsresult rv;
+
+  nsCOMPtr<nsIURI> docUri;
+  rv = GetDocumentURI(aEditor, getter_AddRefs(docUri));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  nsCOMPtr<nsIContentPrefService> contentPrefService =
+    do_GetService(NS_CONTENT_PREF_SERVICE_CONTRACTID);
+  NS_ENSURE_TRUE(contentPrefService, NS_ERROR_NOT_AVAILABLE);
+
+  nsCOMPtr<nsIWritableVariant> uri = do_CreateInstance(NS_VARIANT_CONTRACTID);
+  NS_ENSURE_TRUE(uri, NS_ERROR_OUT_OF_MEMORY);
+  uri->SetAsISupports(docUri);
+
+  PRBool hasPref;
+  if (NS_SUCCEEDED(contentPrefService->HasPref(uri, CPS_PREF_NAME, &hasPref)) && hasPref) {
+    nsCOMPtr<nsIVariant> pref;
+    contentPrefService->GetPref(uri, CPS_PREF_NAME, nsnull, getter_AddRefs(pref));
+    pref->GetAsAString(aDictionary);
+  } else {
+    aDictionary.Truncate();
+  }
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+LastDictionary::StoreCurrentDictionary(nsIEditor* aEditor, const nsAString& aDictionary)
+{
+  NS_ENSURE_ARG_POINTER(aEditor);
+
+  nsresult rv;
+
+  nsCOMPtr<nsIURI> docUri;
+  rv = GetDocumentURI(aEditor, getter_AddRefs(docUri));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  nsCOMPtr<nsIWritableVariant> uri = do_CreateInstance(NS_VARIANT_CONTRACTID);
+  NS_ENSURE_TRUE(uri, NS_ERROR_OUT_OF_MEMORY);
+  uri->SetAsISupports(docUri);
+
+  nsCOMPtr<nsIWritableVariant> prefValue = do_CreateInstance(NS_VARIANT_CONTRACTID);
+  NS_ENSURE_TRUE(prefValue, NS_ERROR_OUT_OF_MEMORY);
+  prefValue->SetAsAString(aDictionary);
+
+  nsCOMPtr<nsIContentPrefService> contentPrefService =
+    do_GetService(NS_CONTENT_PREF_SERVICE_CONTRACTID);
+  NS_ENSURE_TRUE(contentPrefService, NS_ERROR_NOT_INITIALIZED);
+
+  return contentPrefService->SetPref(uri, CPS_PREF_NAME, prefValue);
+}
+
+NS_IMETHODIMP
+LastDictionary::ClearCurrentDictionary(nsIEditor* aEditor)
+{
+  NS_ENSURE_ARG_POINTER(aEditor);
+
+  nsresult rv;
+
+  nsCOMPtr<nsIURI> docUri;
+  rv = GetDocumentURI(aEditor, getter_AddRefs(docUri));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  nsCOMPtr<nsIWritableVariant> uri = do_CreateInstance(NS_VARIANT_CONTRACTID);
+  NS_ENSURE_TRUE(uri, NS_ERROR_OUT_OF_MEMORY);
+  uri->SetAsISupports(docUri);
+
+  nsCOMPtr<nsIContentPrefService> contentPrefService =
+    do_GetService(NS_CONTENT_PREF_SERVICE_CONTRACTID);
+  NS_ENSURE_TRUE(contentPrefService, NS_ERROR_NOT_INITIALIZED);
+
+  return contentPrefService->RemovePref(uri, CPS_PREF_NAME);
+}
+
+LastDictionary* nsEditorSpellCheck::gDictionaryStore = nsnull;
+
 NS_IMPL_CYCLE_COLLECTING_ADDREF(nsEditorSpellCheck)
 NS_IMPL_CYCLE_COLLECTING_RELEASE(nsEditorSpellCheck)
 
@@ -89,15 +220,16 @@ NS_INTERFACE_MAP_BEGIN(nsEditorSpellCheck)
   NS_INTERFACE_MAP_ENTRIES_CYCLE_COLLECTION(nsEditorSpellCheck)
 NS_INTERFACE_MAP_END
 
-NS_IMPL_CYCLE_COLLECTION_2(nsEditorSpellCheck,
+NS_IMPL_CYCLE_COLLECTION_3(nsEditorSpellCheck,
+                           mEditor,
                            mSpellChecker,
                            mTxtSrvFilter)
 
 nsEditorSpellCheck::nsEditorSpellCheck()
   : mSuggestedWordIndex(0)
   , mDictionaryIndex(0)
+  , mEditor(nsnull)
   , mUpdateDictionaryRunning(PR_FALSE)
-  , mDictWasSetManually(PR_FALSE)
 {
 }
 
@@ -135,7 +267,15 @@ nsEditorSpellCheck::CanSpellCheck(PRBool* _retval)
 NS_IMETHODIMP    
 nsEditorSpellCheck::InitSpellChecker(nsIEditor* aEditor, PRBool aEnableSelectionChecking)
 {
+  NS_ENSURE_TRUE(aEditor, NS_ERROR_NULL_POINTER);
+  mEditor = aEditor;
+
   nsresult rv;
+
+  if (!gDictionaryStore) {
+    gDictionaryStore = new LastDictionary();
+  }
+
 
   // We can spell check with any editor type
   nsCOMPtr<nsITextServicesDocument>tsDoc =
@@ -208,7 +348,7 @@ nsEditorSpellCheck::InitSpellChecker(nsIEditor* aEditor, PRBool aEnableSelection
 
   // do not fail if UpdateCurrentDictionary fails because this method may
   // succeed later.
-  UpdateCurrentDictionary(aEditor);
+  UpdateCurrentDictionary();
   return NS_OK;
 }
 
@@ -391,9 +531,56 @@ nsEditorSpellCheck::SetCurrentDictionary(const nsAString& aDictionary)
   NS_ENSURE_TRUE(mSpellChecker, NS_ERROR_NOT_INITIALIZED);
 
   if (!mUpdateDictionaryRunning) {
-    mDictWasSetManually = PR_TRUE;
+
+    nsDefaultStringComparator comparator;
+    nsAutoString langCode;
+    PRInt32 dashIdx = aDictionary.FindChar('-');
+    if (dashIdx != -1) {
+      langCode.Assign(Substring(aDictionary, 0, dashIdx));
+    } else {
+      langCode.Assign(aDictionary);
+    }
+
+    if (mPreferredLang.IsEmpty() || !nsStyleUtil::DashMatchCompare(mPreferredLang, langCode, comparator)) {
+      // When user sets dictionary manually, we store this value associated
+      // with editor url.
+      gDictionaryStore->StoreCurrentDictionary(mEditor, aDictionary);
+    } else {
+      // If user sets a dictionary matching (even partially), lang defined by
+      // document, we consider content pref has been canceled, and we clear it.
+      gDictionaryStore->ClearCurrentDictionary(mEditor);
+    }
+
+    // Also store it in as a preference. It will be used as a default value
+    // when everything else fails.
+    Preferences::SetString("spellchecker.dictionary", aDictionary);
   }
   return mSpellChecker->SetCurrentDictionary(aDictionary);
+}
+
+NS_IMETHODIMP
+nsEditorSpellCheck::CheckCurrentDictionary()
+{
+  mSpellChecker->CheckCurrentDictionary();
+
+  // Check if our current dictionary is still available.
+  nsAutoString currentDictionary;
+  nsresult rv = GetCurrentDictionary(currentDictionary);
+  if (NS_SUCCEEDED(rv) && !currentDictionary.IsEmpty()) {
+    return NS_OK;
+  }
+
+  // If our preferred current dictionary has gone, pick another one.
+  nsTArray<nsString> dictList;
+  rv = mSpellChecker->GetDictionaryList(&dictList);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  if (dictList.Length() > 0) {
+    rv = SetCurrentDictionary(dictList[0]);
+    NS_ENSURE_SUCCESS(rv, rv);
+  }
+
+  return NS_OK;
 }
 
 NS_IMETHODIMP    
@@ -407,21 +594,6 @@ nsEditorSpellCheck::UninitSpellChecker()
   mDictionaryIndex = 0;
   mSpellChecker = 0;
   return NS_OK;
-}
-
-// Save the last set dictionary to the user's preferences.
-NS_IMETHODIMP
-nsEditorSpellCheck::SaveDefaultDictionary()
-{
-  if (!mDictWasSetManually) {
-    return NS_OK;
-  }
-
-  nsAutoString dictName;
-  nsresult rv = GetCurrentDictionary(dictName);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  return Preferences::SetString("spellchecker.dictionary", dictName);
 }
 
 
@@ -442,50 +614,57 @@ nsEditorSpellCheck::DeleteSuggestedWordList()
 }
 
 NS_IMETHODIMP
-nsEditorSpellCheck::UpdateCurrentDictionary(nsIEditor* aEditor)
+nsEditorSpellCheck::UpdateCurrentDictionary()
 {
-  if (mDictWasSetManually) { // user has set dictionary manually; we better not change it.
-    return NS_OK;
-  }
-
   nsresult rv;
 
   UpdateDictionnaryHolder holder(this);
 
-  // Tell the spellchecker what dictionary to use:
-  nsAutoString dictName;
-
-  // First, try to get language with html5 algorithm
-  nsAutoString editorLang;
-
+  // Get language with html5 algorithm
   nsCOMPtr<nsIContent> rootContent;
-
-  nsCOMPtr<nsIHTMLEditor> htmlEditor = do_QueryInterface(aEditor);
+  nsCOMPtr<nsIHTMLEditor> htmlEditor = do_QueryInterface(mEditor);
   if (htmlEditor) {
     rootContent = htmlEditor->GetActiveEditingHost();
   } else {
     nsCOMPtr<nsIDOMElement> rootElement;
-    rv = aEditor->GetRootElement(getter_AddRefs(rootElement));
+    rv = mEditor->GetRootElement(getter_AddRefs(rootElement));
     NS_ENSURE_SUCCESS(rv, rv);
     rootContent = do_QueryInterface(rootElement);
   }
   NS_ENSURE_TRUE(rootContent, NS_ERROR_FAILURE);
 
-  rootContent->GetLang(editorLang);
+  mPreferredLang.Truncate();
+  rootContent->GetLang(mPreferredLang);
 
-  if (editorLang.IsEmpty()) {
-    nsCOMPtr<nsIDocument> doc = rootContent->GetCurrentDoc();
-    NS_ENSURE_TRUE(doc, NS_ERROR_FAILURE);
-    doc->GetContentLanguage(editorLang);
+  // Tell the spellchecker what dictionary to use:
+
+  // First try to get dictionary from content prefs. If we have one, do not got
+  // further. Use this exact dictionary.
+  nsAutoString dictName;
+  rv = gDictionaryStore->FetchLastDictionary(mEditor, dictName);
+  if (NS_SUCCEEDED(rv) && !dictName.IsEmpty()) {
+    if (NS_FAILED(SetCurrentDictionary(dictName))) { 
+      // may be dictionary was uninstalled ?
+      gDictionaryStore->ClearCurrentDictionary(mEditor);
+    }
+    return NS_OK;
   }
 
-  if (!editorLang.IsEmpty()) {
-    dictName.Assign(editorLang);
+  if (mPreferredLang.IsEmpty()) {
+    nsCOMPtr<nsIDocument> doc = rootContent->GetCurrentDoc();
+    NS_ENSURE_TRUE(doc, NS_ERROR_FAILURE);
+    doc->GetContentLanguage(mPreferredLang);
+  }
+
+  // Then, try to use language computed from element
+  if (!mPreferredLang.IsEmpty()) {
+    dictName.Assign(mPreferredLang);
   }
 
   // otherwise, get language from preferences
+  nsAutoString preferedDict(Preferences::GetLocalizedString("spellchecker.dictionary"));
   if (dictName.IsEmpty()) {
-    dictName.Assign(Preferences::GetLocalizedString("spellchecker.dictionary"));
+    dictName.Assign(preferedDict);
   }
 
   if (dictName.IsEmpty())
@@ -504,33 +683,54 @@ nsEditorSpellCheck::UpdateCurrentDictionary(nsIEditor* aEditor)
     }
   }
 
-  SetCurrentDictionary(EmptyString());
-
   if (NS_SUCCEEDED(rv) && !dictName.IsEmpty()) {
     rv = SetCurrentDictionary(dictName);
     if (NS_FAILED(rv)) {
       // required dictionary was not available. Try to get a dictionary
-      // matching at least language part of dictName: If required dictionary is
-      // "aa-bb", we try "aa", then we try any available dictionary aa-XX
+      // matching at least language part of dictName: 
+
       nsAutoString langCode;
       PRInt32 dashIdx = dictName.FindChar('-');
       if (dashIdx != -1) {
         langCode.Assign(Substring(dictName, 0, dashIdx));
-        // try to use langCode
-        rv = SetCurrentDictionary(langCode);
       } else {
         langCode.Assign(dictName);
       }
+
+      nsDefaultStringComparator comparator;
+
+      // try dictionary.spellchecker preference if it starts with langCode (and
+      // if we haven't tried it already)
+      if (!preferedDict.IsEmpty() && !dictName.Equals(preferedDict) && 
+          nsStyleUtil::DashMatchCompare(preferedDict, langCode, comparator)) {
+        rv = SetCurrentDictionary(preferedDict);
+      }
+
+      // Otherwise, try langCode (if we haven't tried it already)
+      if (NS_FAILED(rv)) {
+        if (!dictName.Equals(langCode) && !preferedDict.Equals(langCode)) {
+          rv = SetCurrentDictionary(langCode);
+        }
+      }
+
+      // Otherwise, try any available dictionary aa-XX
       if (NS_FAILED(rv)) {
         // loop over avaible dictionaries; if we find one with required
         // language, use it
         nsTArray<nsString> dictList;
         rv = mSpellChecker->GetDictionaryList(&dictList);
         NS_ENSURE_SUCCESS(rv, rv);
-        nsDefaultStringComparator comparator;
         PRInt32 i, count = dictList.Length();
         for (i = 0; i < count; i++) {
           nsAutoString dictStr(dictList.ElementAt(i));
+
+          if (dictStr.Equals(dictName) ||
+              dictStr.Equals(preferedDict) ||
+              dictStr.Equals(langCode)) {
+            // We have already tried it
+            continue;
+          }
+
           if (nsStyleUtil::DashMatchCompare(dictStr, langCode, comparator) &&
               NS_SUCCEEDED(SetCurrentDictionary(dictStr))) {
               break;
@@ -543,7 +743,7 @@ nsEditorSpellCheck::UpdateCurrentDictionary(nsIEditor* aEditor)
   // If we have not set dictionary, and the editable element doesn't have a
   // lang attribute, we try to get a dictionary. First try, en-US. If it does
   // not work, pick the first one.
-  if (editorLang.IsEmpty()) {
+  if (mPreferredLang.IsEmpty()) {
     nsAutoString currentDictionary;
     rv = GetCurrentDictionary(currentDictionary);
     if (NS_FAILED(rv) || currentDictionary.IsEmpty()) {
@@ -566,4 +766,9 @@ nsEditorSpellCheck::UpdateCurrentDictionary(nsIEditor* aEditor)
   DeleteSuggestedWordList();
 
   return NS_OK;
+}
+
+void 
+nsEditorSpellCheck::ShutDown() {
+  delete gDictionaryStore;
 }

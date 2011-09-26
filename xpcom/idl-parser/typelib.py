@@ -78,7 +78,7 @@ def build_interface(iface, ifaces):
     def get_type(type, calltype, iid_is=None, size_is=None):
         """ Return the appropriate xpt.Type object for this param """
 
-        if isinstance(type, xpidl.Typedef):
+        while isinstance(type, xpidl.Typedef):
             type = type.realtype
 
         if isinstance(type, xpidl.Builtin):
@@ -94,7 +94,9 @@ def build_interface(iface, ifaces):
                                         reference=False)
 
         if isinstance(type, xpidl.Array):
-            return xpt.ArrayType(get_type(type.type, calltype), size_is,
+            # NB: For an Array<T> we pass down the iid_is to get the type of T.
+            #     This allows Arrays of InterfaceIs types to work.
+            return xpt.ArrayType(get_type(type.type, calltype, iid_is), size_is,
                                  #XXXkhuey length_is duplicates size_is (bug 677788),
                                  size_is)
 

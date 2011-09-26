@@ -224,6 +224,7 @@ nsXULTemplateBuilder::Uninit(PRBool aIsFinal)
 {
     if (mObservedDocument && aIsFinal) {
         gObserverService->RemoveObserver(this, DOM_WINDOW_DESTROYED_TOPIC);
+        gObserverService->RemoveObserver(this, NS_XPCOM_SHUTDOWN_OBSERVER_ID);
         mObservedDocument->RemoveObserver(this);
         mObservedDocument = nsnull;
     }
@@ -465,6 +466,8 @@ nsXULTemplateBuilder::Init(nsIContent* aElement)
         doc->AddObserver(this);
 
         mObservedDocument = doc;
+        gObserverService->AddObserver(this, NS_XPCOM_SHUTDOWN_OBSERVER_ID,
+                                      PR_FALSE);
         gObserverService->AddObserver(this, DOM_WINDOW_DESTROYED_TOPIC,
                                       PR_FALSE);
     }
@@ -1117,6 +1120,8 @@ nsXULTemplateBuilder::Observe(nsISupports* aSubject,
             if (doc && doc == mObservedDocument)
                 NodeWillBeDestroyed(doc);
         }
+    } else if (!strcmp(aTopic, NS_XPCOM_SHUTDOWN_OBSERVER_ID)) {
+        UninitTrue();
     }
     return NS_OK;
 }
@@ -1415,7 +1420,7 @@ nsXULTemplateBuilder::InitHTMLTemplateRoot()
     if (! context)
         return NS_ERROR_UNEXPECTED;
 
-    JSContext* jscontext = reinterpret_cast<JSContext*>(context->GetNativeContext());
+    JSContext* jscontext = context->GetNativeContext();
     NS_ASSERTION(context != nsnull, "no jscontext");
     if (! jscontext)
         return NS_ERROR_UNEXPECTED;
@@ -2127,9 +2132,10 @@ nsXULTemplateBuilder::DetermineMemberVariable(nsIContent* aElement)
 {
     // recursively iterate over the children looking for an element
     // with uri="?..."
-    for (nsINode::ChildIterator iter(aElement); !iter.IsDone(); iter.Next()) {
+    for (nsIContent* child = aElement->GetFirstChild();
+         child;
+         child = child->GetNextSibling()) {
         nsAutoString uri;
-        nsIContent *child = iter;
         child->GetAttr(kNameSpaceID_None, nsGkAtoms::uri, uri);
         if (!uri.IsEmpty() && uri[0] == PRUnichar('?')) {
             return NS_NewAtom(uri);

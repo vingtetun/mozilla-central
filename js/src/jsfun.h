@@ -120,12 +120,6 @@ struct JSFunction : public JSObject_Slots2
             uint16       skipmin; /* net skip amount up (toward zero) from
                                      script->staticLevel to nearest upvar,
                                      including upvars in nested functions */
-            JSPackedBool wrapper; /* true if this function is a wrapper that
-                                     rewrites bytecode optimized for a function
-                                     judged non-escaping by the compiler, which
-                                     then escaped via the debugger or a rogue
-                                     indirect eval; if true, then this function
-                                     object's proto is the wrapped object */
             js::Shape   *names;   /* argument and variable names */
         } i;
         void            *nativeOrScript;
@@ -176,7 +170,7 @@ struct JSFunction : public JSObject_Slots2
 
   private:
     /*
-     * js_FunctionClass reserves two slots, which are free in JSObject::fslots
+     * FunctionClass reserves two slots, which are free in JSObject::fslots
      * without requiring dslots allocation. Null closures that can be joined to
      * a compiler-created function object use the first one to hold a mutable
      * methodAtom() state variable, needed for correct foo.caller handling.
@@ -210,12 +204,12 @@ struct JSFunction : public JSObject_Slots2
         return isInterpreted() ? script() : NULL;
     }
 
-    js::Native native() const {
+    JSNative native() const {
         JS_ASSERT(isNative());
         return u.n.native;
     }
 
-    js::Native maybeNative() const {
+    JSNative maybeNative() const {
         return isInterpreted() ? NULL : native();
     }
 
@@ -260,22 +254,6 @@ struct JSFunction : public JSObject_Slots2
 # define JS_TN(name,fastcall,nargs,flags,trcinfo)                             \
     JS_FN(name, fastcall, nargs, flags)
 #endif
-
-extern JS_PUBLIC_DATA(js::Class) js_CallClass;
-extern JS_PUBLIC_DATA(js::Class) js_FunctionClass;
-extern JS_FRIEND_DATA(js::Class) js_DeclEnvClass;
-
-inline bool
-JSObject::isCall() const
-{
-    return getClass() == &js_CallClass;
-}
-
-inline bool
-JSObject::isFunction() const
-{
-    return getClass() == &js_FunctionClass;
-}
 
 inline JSFunction *
 JSObject::getFunctionPrivate() const
@@ -328,7 +306,7 @@ IsNativeFunction(const js::Value &v, JSFunction **fun)
 }
 
 static JS_ALWAYS_INLINE bool
-IsNativeFunction(const js::Value &v, Native native)
+IsNativeFunction(const js::Value &v, JSNative native)
 {
     JSFunction *fun;
     return IsFunctionObject(v, &fun) && fun->maybeNative() == native;
@@ -337,20 +315,20 @@ IsNativeFunction(const js::Value &v, Native native)
 /*
  * When we have an object of a builtin class, we don't quite know what its
  * valueOf/toString methods are, since these methods may have been overwritten
- * or shadowed. However, we can still do better than js_TryMethod by
+ * or shadowed. However, we can still do better than the general case by
  * hard-coding the necessary properties for us to find the native we expect.
  *
  * TODO: a per-thread shape-based cache would be faster and simpler.
  */
 static JS_ALWAYS_INLINE bool
-ClassMethodIsNative(JSContext *cx, JSObject *obj, Class *clasp, jsid methodid, Native native)
+ClassMethodIsNative(JSContext *cx, JSObject *obj, Class *clasp, jsid methodid, JSNative native)
 {
     JS_ASSERT(obj->getClass() == clasp);
 
     Value v;
-    if (!HasDataProperty(obj, methodid, &v)) {
+    if (!HasDataProperty(cx, obj, methodid, &v)) {
         JSObject *proto = obj->getProto();
-        if (!proto || proto->getClass() != clasp || !HasDataProperty(proto, methodid, &v))
+        if (!proto || proto->getClass() != clasp || !HasDataProperty(cx, proto, methodid, &v))
             return false;
     }
 
@@ -420,6 +398,11 @@ GetFunctionNameBytes(JSContext *cx, JSFunction *fun, JSAutoByteString *bytes)
     return js_anonymous_str;
 }
 
+extern JSFunctionSpec function_methods[];
+
+extern JSBool
+Function(JSContext *cx, uintN argc, Value *vp);
+
 extern bool
 IsBuiltinFunctionConstructor(JSFunction *fun);
 
@@ -444,14 +427,8 @@ extern JSString *
 fun_toStringHelper(JSContext *cx, JSObject *obj, uintN indent);
 
 extern JSFunction *
-js_NewFunction(JSContext *cx, JSObject *funobj, js::Native native, uintN nargs,
+js_NewFunction(JSContext *cx, JSObject *funobj, JSNative native, uintN nargs,
                uintN flags, JSObject *parent, JSAtom *atom);
-
-extern JSObject *
-js_InitFunctionClass(JSContext *cx, JSObject *obj);
-
-extern JSObject *
-js_InitArgumentsClass(JSContext *cx, JSObject *obj);
 
 extern void
 js_FinalizeFunction(JSContext *cx, JSFunction *fun);
@@ -461,13 +438,46 @@ js_CloneFunctionObject(JSContext *cx, JSFunction *fun, JSObject *parent,
                        JSObject *proto);
 
 inline JSObject *
-CloneFunctionObject(JSContext *cx, JSFunction *fun, JSObject *parent)
+CloneFunctionObject(JSContext *cx, JSFunction *fun, JSObject *parent,
+                    bool ignoreSingletonClone = false)
 {
     JS_ASSERT(parent);
     JSObject *proto;
     if (!js_GetClassPrototype(cx, parent, JSProto_Function, &proto))
         return NULL;
+
+    /*
+     * For attempts to clone functions at a function definition opcode or from
+     * a method barrier, don't perform the clone if the function has singleton
+     * type. CloneFunctionObject was called pessimistically, and we need to
+     * preserve the type's property that if it is singleton there is only a
+     * single object with its type in existence.
+     */
+    if (ignoreSingletonClone && fun->hasSingletonType()) {
+        JS_ASSERT(fun->getProto() == proto);
+        fun->setParent(parent);
+        return fun;
+    }
+
     return js_CloneFunctionObject(cx, fun, parent, proto);
+}
+
+inline JSObject *
+CloneFunctionObject(JSContext *cx, JSFunction *fun)
+{
+    /*
+     * Variant which makes an exact clone of fun, preserving parent and proto.
+     * Calling the above version CloneFunctionObject(cx, fun, fun->getParent())
+     * is not equivalent: API clients, including XPConnect, can reparent
+     * objects so that fun->getGlobal() != fun->getProto()->getGlobal().
+     * See ReparentWrapperIfFound.
+     */
+    JS_ASSERT(fun->getParent() && fun->getProto());
+
+    if (fun->hasSingletonType())
+        return fun;
+
+    return js_CloneFunctionObject(cx, fun, fun->getParent(), fun->getProto());
 }
 
 extern JSObject * JS_FASTCALL
@@ -477,13 +487,13 @@ extern JSObject *
 js_NewFlatClosure(JSContext *cx, JSFunction *fun, JSOp op, size_t oplen);
 
 extern JSFunction *
-js_DefineFunction(JSContext *cx, JSObject *obj, jsid id, js::Native native,
+js_DefineFunction(JSContext *cx, JSObject *obj, jsid id, JSNative native,
                   uintN nargs, uintN flags);
 
 /*
  * Flags for js_ValueToFunction and js_ReportIsNotFunction.
  */
-#define JSV2F_CONSTRUCT         CONSTRUCT
+#define JSV2F_CONSTRUCT         INITIAL_CONSTRUCT
 #define JSV2F_SEARCH_STACK      0x10000
 
 extern JSFunction *
@@ -510,10 +520,10 @@ js_PutCallObjectOnTrace(JSObject *scopeChain, uint32 nargs, js::Value *argv,
 
 namespace js {
 
-JSObject *
+CallObject *
 CreateFunCallObject(JSContext *cx, StackFrame *fp);
 
-JSObject *
+CallObject *
 CreateEvalCallObject(JSContext *cx, StackFrame *fp);
 
 extern JSBool

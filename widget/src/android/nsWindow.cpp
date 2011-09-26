@@ -128,6 +128,7 @@ static nsTArray<nsWindow*> gTopLevelWindows;
 static nsRefPtr<gl::GLContext> sGLContext;
 static bool sFailedToCreateGLContext = false;
 static bool sValidSurface;
+static bool sSurfaceExists = false;
 
 // Multitouch swipe thresholds in inches
 static const double SWIPE_MAX_PINCH_DELTA_INCHES = 0.4;
@@ -373,7 +374,7 @@ nsWindow::Show(PRBool aState)
         nsAppShell::gAppShell->PostEvent(new AndroidGeckoEvent(-1, -1, -1, -1));
     }
 
-#ifdef ANDROID_DEBUG_WIDGET
+#ifdef DEBUG_ANDROID_WIDGET
     DumpWindows();
 #endif
 
@@ -844,9 +845,14 @@ nsWindow::OnGlobalAndroidEvent(AndroidGeckoEvent *ae)
             break;
 
         case AndroidGeckoEvent::SURFACE_CREATED:
+            sSurfaceExists = true;
             break;
 
         case AndroidGeckoEvent::SURFACE_DESTROYED:
+            if (sGLContext && sValidSurface) {
+                sGLContext->ReleaseSurface();
+            }
+            sSurfaceExists = false;
             sValidSurface = false;
             break;
 
@@ -970,6 +976,11 @@ nsWindow::DrawTo(gfxASurface *targetSurface)
 void
 nsWindow::OnDraw(AndroidGeckoEvent *ae)
 {
+  
+    if (!sSurfaceExists) {
+        return;
+    }
+
     if (!IsTopLevel()) {
         ALOG("##### redraw for window %p, which is not a toplevel window -- sending to toplevel!", (void*) this);
         DumpWindows();
@@ -1049,6 +1060,10 @@ nsWindow::OnDraw(AndroidGeckoEvent *ae)
         }
     } else {
         int drawType = sview.BeginDrawing();
+
+        if (drawType == AndroidGeckoSurfaceView::DRAW_DISABLED) {
+            return;
+        }
 
         if (drawType == AndroidGeckoSurfaceView::DRAW_ERROR) {
             ALOG("##### BeginDrawing failed!");
@@ -1572,13 +1587,13 @@ nsWindow::OnKeyEvent(AndroidGeckoEvent *ae)
     if (status == nsEventStatus_eConsumeNoDefault) {
         pressEvent.flags |= NS_EVENT_FLAG_NO_DEFAULT;
     }
-#ifdef ANDROID_DEBUG_WIDGET
+#ifdef DEBUG_ANDROID_WIDGET
     __android_log_print(ANDROID_LOG_INFO, "Gecko", "Dispatching key pressEvent with keyCode %d charCode %d shift %d alt %d sym/ctrl %d metamask %d", pressEvent.keyCode, pressEvent.charCode, pressEvent.isShift, pressEvent.isAlt, pressEvent.isControl, ae->MetaState());
 #endif
     DispatchEvent(&pressEvent);
 }
 
-#ifdef ANDROID_DEBUG_IME
+#ifdef DEBUG_ANDROID_IME
 #define ALOGIME(args...) ALOG(args)
 #else
 #define ALOGIME(args...)
@@ -1617,12 +1632,15 @@ nsWindow::OnIMEEvent(AndroidGeckoEvent *ae)
             ALOGIME("IME: IME_COMPOSITION_END");
             nsCompositionEvent event(PR_TRUE, NS_COMPOSITION_END, this);
             InitEvent(event, nsnull);
+            event.data = mIMELastDispatchedComposingText;
+            mIMELastDispatchedComposingText.Truncate();
             DispatchEvent(&event);
         }
         return;
     case AndroidGeckoEvent::IME_COMPOSITION_BEGIN:
         {
             ALOGIME("IME: IME_COMPOSITION_BEGIN");
+            mIMELastDispatchedComposingText.Truncate();
             nsCompositionEvent event(PR_TRUE, NS_COMPOSITION_START, this);
             InitEvent(event, nsnull);
             DispatchEvent(&event);
@@ -1643,6 +1661,20 @@ nsWindow::OnIMEEvent(AndroidGeckoEvent *ae)
             event.theText.Assign(ae->Characters());
             event.rangeArray = mIMERanges.Elements();
             event.rangeCount = mIMERanges.Length();
+
+            if (mIMEComposing &&
+                event.theText != mIMELastDispatchedComposingText) {
+                nsCompositionEvent compositionUpdate(PR_TRUE,
+                                                     NS_COMPOSITION_UPDATE,
+                                                     this);
+                InitEvent(compositionUpdate, nsnull);
+                compositionUpdate.data = event.theText;
+                mIMELastDispatchedComposingText = event.theText;
+                DispatchEvent(&compositionUpdate);
+                // XXX We must check whether this widget is destroyed or not
+                //     before dispatching next event.  However, Android's
+                //     nsWindow has never checked it...
+            }
 
             ALOGIME("IME: IME_SET_TEXT: l=%u, r=%u",
                 event.theText.Length(), mIMERanges.Length());

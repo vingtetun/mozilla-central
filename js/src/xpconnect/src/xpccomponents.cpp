@@ -1637,7 +1637,7 @@ NS_IMPL_THREADSAFE_RELEASE(nsXPCComponents_ID)
 #define                             XPC_MAP_WANT_CALL
 #define                             XPC_MAP_WANT_CONSTRUCT
 #define                             XPC_MAP_WANT_HASINSTANCE
-#define XPC_MAP_FLAGS               0
+#define XPC_MAP_FLAGS               nsIXPCScriptable::ALLOW_PROP_MODS_DURING_RESOLVE
 #include "xpc_map_end.h" /* This will #undef the above */
 
 
@@ -1865,7 +1865,7 @@ NS_IMPL_THREADSAFE_RELEASE(nsXPCComponents_Exception)
 #define                             XPC_MAP_WANT_CALL
 #define                             XPC_MAP_WANT_CONSTRUCT
 #define                             XPC_MAP_WANT_HASINSTANCE
-#define XPC_MAP_FLAGS               0
+#define XPC_MAP_FLAGS               nsIXPCScriptable::ALLOW_PROP_MODS_DURING_RESOLVE
 #include "xpc_map_end.h" /* This will #undef the above */
 
 
@@ -2426,7 +2426,7 @@ NS_IMPL_THREADSAFE_RELEASE(nsXPCComponents_Constructor)
 #define                             XPC_MAP_WANT_CALL
 #define                             XPC_MAP_WANT_CONSTRUCT
 #define                             XPC_MAP_WANT_HASINSTANCE
-#define XPC_MAP_FLAGS               0
+#define XPC_MAP_FLAGS               nsIXPCScriptable::ALLOW_PROP_MODS_DURING_RESOLVE
 #include "xpc_map_end.h" /* This will #undef the above */
 
 
@@ -2757,6 +2757,13 @@ nsXPCComponents_Utils::LookupMethod()
         return NS_ERROR_XPC_BAD_CONVERT_JS;
 
     JSObject* obj = JSVAL_TO_OBJECT(argv[0]);
+    while(obj && !obj->isWrapper() && !IS_WRAPPER_CLASS(obj->getClass()))
+        obj = JS_GetPrototype(cx, obj);
+
+    if(!obj)
+        return NS_ERROR_XPC_BAD_CONVERT_JS;
+
+    argv[0] = OBJECT_TO_JSVAL(obj);
     rv = nsXPConnect::GetXPConnect()->GetJSObjectOfWrapper(cx, obj, &obj);
     if(NS_FAILED(rv))
         return rv;
@@ -2880,7 +2887,7 @@ nsXPCComponents_Utils::ReportError()
     if(NS_FAILED(rv) || !argv)
         return NS_OK;
 
-    const PRUint64 windowID = nsJSUtils::GetCurrentlyRunningCodeWindowID(cx);
+    const PRUint64 innerWindowID = nsJSUtils::GetCurrentlyRunningCodeInnerWindowID(cx);
 
     JSErrorReport* err = JS_ErrorFromException(cx, argv[0]);
     if(err)
@@ -2899,7 +2906,7 @@ nsXPCComponents_Utils::ReportError()
                                          err->lineno,
                                          column,
                                          err->flags,
-                                         "XPConnect JavaScript", windowID);
+                                         "XPConnect JavaScript", innerWindowID);
         if(NS_FAILED(rv))
             return NS_OK;
 
@@ -2935,8 +2942,8 @@ nsXPCComponents_Utils::ReportError()
         rv = scripterr->InitWithWindowID(reinterpret_cast<const PRUnichar *>(msgchars),
                                          NS_ConvertUTF8toUTF16(fileName).get(),
                                          nsnull,
-                                         lineNo, 0,
-                                         0, "XPConnect JavaScript", windowID);
+                                         lineNo, 0, 0,
+                                         "XPConnect JavaScript", innerWindowID);
         if(NS_SUCCEEDED(rv))
         {
             nsCOMPtr<nsIScriptError> logError = do_QueryInterface(scripterr);
@@ -2992,6 +2999,7 @@ SandboxDump(JSContext *cx, uintN argc, jsval *vp)
 #endif
 
     fputs(cstr, stderr);
+    fflush(stderr);
     NS_Free(cstr);
     JS_SET_RVAL(cx, vp, JSVAL_TRUE);
     return JS_TRUE;
@@ -3153,7 +3161,7 @@ NS_IMPL_ISUPPORTS0(Identity)
 
 nsresult
 xpc_CreateSandboxObject(JSContext * cx, jsval * vp, nsISupports *prinOrSop, JSObject *proto,
-                        bool wantXrays)
+                        bool wantXrays, const nsACString &sandboxName)
 {
     // Create the sandbox global object
     nsresult rv;
@@ -3239,6 +3247,10 @@ xpc_CreateSandboxObject(JSContext * cx, jsval * vp, nsISupports *prinOrSop, JSOb
             return NS_ERROR_UNEXPECTED;
         }
     }
+
+    xpc::CompartmentPrivate *compartmentPrivate =
+        static_cast<xpc::CompartmentPrivate*>(JS_GetCompartmentPrivate(cx, compartment));
+    compartmentPrivate->location = sandboxName;
 
     return NS_OK;
 }
@@ -3351,6 +3363,8 @@ nsXPCComponents_utils_Sandbox::CallOrConstruct(nsIXPConnectWrappedNative *wrappe
 
     JSObject *proto = nsnull;
     bool wantXrays = true;
+    nsCString sandboxName;
+
     if (argc > 1) {
         if (!JSVAL_IS_OBJECT(argv[1]))
             return ThrowAndFail(NS_ERROR_INVALID_ARG, cx, _retval);
@@ -3382,9 +3396,26 @@ nsXPCComponents_utils_Sandbox::CallOrConstruct(nsIXPConnectWrappedNative *wrappe
 
             wantXrays = JSVAL_TO_BOOLEAN(option);
         }
+
+        if (!JS_HasProperty(cx, optionsObject, "sandboxName", &found))
+            return NS_ERROR_INVALID_ARG;
+
+        if (found) {
+            if (!JS_GetProperty(cx, optionsObject, "sandboxName", &option) ||
+                !JSVAL_IS_STRING(option)) {
+                return ThrowAndFail(NS_ERROR_INVALID_ARG, cx, _retval);
+            }
+
+            char *tmp = JS_EncodeString(cx, JSVAL_TO_STRING(option));
+            if (!tmp) {
+                return ThrowAndFail(NS_ERROR_INVALID_ARG, cx, _retval);
+            }
+
+            sandboxName.Adopt(tmp, strlen(tmp));
+        }
     }
 
-    rv = xpc_CreateSandboxObject(cx, vp, prinOrSop, proto, wantXrays);
+    rv = xpc_CreateSandboxObject(cx, vp, prinOrSop, proto, wantXrays, sandboxName);
 
     if (NS_FAILED(rv)) {
         return ThrowAndFail(rv, cx, _retval);

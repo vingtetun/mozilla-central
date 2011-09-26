@@ -22,7 +22,7 @@ var ContextCommands = {
       let x = ContextHelper.popupState.x;
       let y = ContextHelper.popupState.y;
       let json = {x: x, y: y, command: "paste" };
-      messageManager.sendAsyncMessage("Browser:ContextCommand", json);
+      target.messageManager.sendAsyncMessage("Browser:ContextCommand", json);
     } else {
       target.editor.paste(Ci.nsIClipboard.kGlobalClipboard);
       target.focus();
@@ -42,7 +42,7 @@ var ContextCommands = {
       let x = ContextHelper.popupState.x;
       let y = ContextHelper.popupState.y;
       let json = {x: x, y: y, command: "select-all" };
-      messageManager.sendAsyncMessage("Browser:ContextCommand", json);
+      target.messageManager.sendAsyncMessage("Browser:ContextCommand", json);
     } else {
       target.editor.selectAll();
       target.focus();
@@ -69,6 +69,21 @@ var ContextCommands = {
   copyLink: function cc_copyLink() {
     let clipboard = Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper);
     clipboard.copyString(ContextHelper.popupState.linkURL);
+  },
+
+  copyEmail: function cc_copyEmail() {
+      let clipboard = Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper);
+      clipboard.copyString(ContextHelper.popupState.linkURL.substr(ContextHelper.popupState.linkURL.indexOf(':')+1));
+  },
+
+  copyPhone: function cc_copyPhone() {
+      let clipboard = Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper);
+      clipboard.copyString(ContextHelper.popupState.linkURL.substr(ContextHelper.popupState.linkURL.indexOf(':')+1));
+  },
+
+  copyImageLocation: function cc_copyImageLocation() {
+      let clipboard = Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper);
+      clipboard.copyString(ContextHelper.popupState.mediaURL);
   },
 
   shareLink: function cc_shareLink() {

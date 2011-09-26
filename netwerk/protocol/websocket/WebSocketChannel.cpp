@@ -929,7 +929,7 @@ WebSocketChannel::ProcessInput(PRUint8 *buffer, PRUint32 count)
         // (which are non-conformant to send) with u+fffd,
         // but secteam feels that silently rewriting messages is
         // inappropriate - so we will fail the connection instead.
-        if (!IsUTF8(utf8Data)) {
+        if (!IsUTF8(utf8Data, PR_FALSE)) {
           LOG(("WebSocketChannel:: text frame invalid utf-8\n"));
           AbortSession(NS_ERROR_ILLEGAL_VALUE);
           return NS_ERROR_ILLEGAL_VALUE;
@@ -966,7 +966,7 @@ WebSocketChannel::ProcessInput(PRUint8 *buffer, PRUint32 count)
             // (which are non-conformant to send) with u+fffd,
             // but secteam feels that silently rewriting messages is
             // inappropriate - so we will fail the connection instead.
-            if (!IsUTF8(mServerCloseReason)) {
+            if (!IsUTF8(mServerCloseReason, PR_FALSE)) {
               LOG(("WebSocketChannel:: close frame invalid utf-8\n"));
               AbortSession(NS_ERROR_ILLEGAL_VALUE);
               return NS_ERROR_ILLEGAL_VALUE;
@@ -2404,6 +2404,9 @@ WebSocketChannel::OnInputStreamReady(nsIAsyncInputStream *aStream)
   LOG(("WebSocketChannel::OnInputStreamReady() %p\n", this));
   NS_ABORT_IF_FALSE(PR_GetCurrentThread() == gSocketThread, "not socket thread");
 
+  if (!mSocketIn) // did we we clean up the socket after scheduling InputReady?
+    return NS_OK;
+  
   nsRefPtr<nsIStreamListener>    deleteProtector1(mInflateReader);
   nsRefPtr<nsIStringInputStream> deleteProtector2(mInflateStream);
 

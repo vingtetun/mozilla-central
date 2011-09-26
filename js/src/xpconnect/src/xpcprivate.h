@@ -58,8 +58,8 @@
 #include "jsinterp.h"
 #include "jscntxt.h"
 #include "jsdbgapi.h"
+#include "jsfriendapi.h"
 #include "jsgc.h"
-#include "jscompartment.h"
 #include "nscore.h"
 #include "nsXPCOM.h"
 #include "nsAutoPtr.h"
@@ -725,6 +725,9 @@ public:
         IDX_ITERATOR                ,
         IDX_EXPOSEDPROPS            ,
         IDX_SCRIPTONLY              ,
+        IDX_BASEURIOBJECT           ,
+        IDX_NODEPRINCIPAL           ,
+        IDX_DOCUMENTURIOBJECT       ,
         IDX_TOTAL_COUNT // just a count of the above
     };
 
@@ -1388,14 +1391,35 @@ XPC_WN_JSOp_ThisObject(JSContext *cx, JSObject *obj);
 // Macros to initialize Object or Function like XPC_WN classes
 #define XPC_WN_WithCall_ObjectOps                                             \
     {                                                                         \
+        nsnull, /* lookupGeneric */                                           \
         nsnull, /* lookupProperty */                                          \
+        nsnull, /* lookupElement */                                           \
+        nsnull, /* lookupSpecial */                                           \
+        nsnull, /* defineGeneric */                                           \
         nsnull, /* defineProperty */                                          \
+        nsnull, /* defineElement */                                           \
+        nsnull, /* defineSpecial */                                           \
+        nsnull, /* getGeneric    */                                           \
         nsnull, /* getProperty    */                                          \
+        nsnull, /* getElement    */                                           \
+        nsnull, /* getSpecial    */                                           \
+        nsnull, /* setGeneric    */                                           \
         nsnull, /* setProperty    */                                          \
+        nsnull, /* setElement    */                                           \
+        nsnull, /* setSpecial    */                                           \
+        nsnull, /* getGenericAttributes  */                                   \
         nsnull, /* getAttributes  */                                          \
+        nsnull, /* getElementAttributes  */                                   \
+        nsnull, /* getSpecialAttributes  */                                   \
+        nsnull, /* setGenericAttributes  */                                   \
         nsnull, /* setAttributes  */                                          \
+        nsnull, /* setElementAttributes  */                                   \
+        nsnull, /* setSpecialAttributes  */                                   \
+        nsnull, /* deleteGeneric */                                           \
         nsnull, /* deleteProperty */                                          \
-        js::Valueify(XPC_WN_JSOp_Enumerate),                                  \
+        nsnull, /* deleteElement */                                           \
+        nsnull, /* deleteSpecial */                                           \
+        XPC_WN_JSOp_Enumerate,                                                \
         XPC_WN_JSOp_TypeOf_Function,                                          \
         nsnull, /* fix            */                                          \
         XPC_WN_JSOp_ThisObject,                                               \
@@ -1404,14 +1428,35 @@ XPC_WN_JSOp_ThisObject(JSContext *cx, JSObject *obj);
 
 #define XPC_WN_NoCall_ObjectOps                                               \
     {                                                                         \
+        nsnull, /* lookupGeneric */                                           \
         nsnull, /* lookupProperty */                                          \
+        nsnull, /* lookupElement */                                           \
+        nsnull, /* lookupSpecial */                                           \
+        nsnull, /* defineGeneric */                                           \
         nsnull, /* defineProperty */                                          \
+        nsnull, /* defineElement */                                           \
+        nsnull, /* defineSpecial */                                           \
+        nsnull, /* getGeneric    */                                           \
         nsnull, /* getProperty    */                                          \
+        nsnull, /* getElement    */                                           \
+        nsnull, /* getSpecial    */                                           \
+        nsnull, /* setGeneric    */                                           \
         nsnull, /* setProperty    */                                          \
+        nsnull, /* setElement    */                                           \
+        nsnull, /* setSpecial    */                                           \
+        nsnull, /* getGenericAttributes  */                                   \
         nsnull, /* getAttributes  */                                          \
+        nsnull, /* getElementAttributes  */                                   \
+        nsnull, /* getSpecialAttributes  */                                   \
+        nsnull, /* setGenericAttributes  */                                   \
         nsnull, /* setAttributes  */                                          \
+        nsnull, /* setElementAttributes  */                                   \
+        nsnull, /* setSpecialAttributes  */                                   \
+        nsnull, /* deleteGeneric */                                           \
         nsnull, /* deleteProperty */                                          \
-        js::Valueify(XPC_WN_JSOp_Enumerate),                                  \
+        nsnull, /* deleteElement */                                           \
+        nsnull, /* deleteSpecial */                                           \
+        XPC_WN_JSOp_Enumerate,                                                \
         XPC_WN_JSOp_TypeOf_Object,                                            \
         nsnull, /* fix            */                                          \
         XPC_WN_JSOp_ThisObject,                                               \
@@ -1952,6 +1997,7 @@ public:
     JSBool AllowPropModsToPrototype()     GET_IT(ALLOW_PROP_MODS_TO_PROTOTYPE)
     JSBool DontSharePrototype()           GET_IT(DONT_SHARE_PROTOTYPE)
     JSBool DontReflectInterfaceNames()    GET_IT(DONT_REFLECT_INTERFACE_NAMES)
+    JSBool UseStubEqualityHook()          GET_IT(USE_STUB_EQUALITY_HOOK)
 
 #undef GET_IT
 };
@@ -1979,7 +2025,7 @@ public:
     PRUint32                        GetInterfacesBitmap() const
         {return mJSClass.interfacesBitmap;}
     JSClass*                        GetJSClass()
-        {return js::Jsvalify(&mJSClass.base);}
+        {return Jsvalify(&mJSClass.base);}
     JSClass*                        GetSlimJSClass()
         {if(mCanBeSlim) return GetJSClass(); return nsnull;}
 
@@ -3885,7 +3931,9 @@ private:
     PRUint32 mColumnNumber;
     PRUint32 mFlags;
     nsCString mCategory;
-    PRUint64 mWindowID;
+    PRUint64 mOuterWindowID;
+    PRUint64 mInnerWindowID;
+    PRUint64 mTimeStamp;
 };
 
 /***************************************************************************/
@@ -4315,7 +4363,7 @@ xpc_GetJSPrivate(JSObject *obj)
 // and used.
 nsresult
 xpc_CreateSandboxObject(JSContext * cx, jsval * vp, nsISupports *prinOrSop,
-                        JSObject *proto, bool preferXray);
+                        JSObject *proto, bool preferXray, const nsACString &sandboxName);
 
 // Helper for evaluating scripts in a sandbox object created with
 // xpc_CreateSandboxObject(). The caller is responsible of ensuring
@@ -4345,10 +4393,12 @@ inline jsval
 GetRTStringByIndex(JSContext *cx, uintN index);
 
 // Wrapper for JS_NewObject to mark the new object as system when parent is
-// also a system object.
+// also a system object. If uniqueType is specified then a new type object will
+// be created which is used only by the result, so that its property types
+// will be tracked precisely.
 inline JSObject*
 xpc_NewSystemInheritingJSObject(JSContext *cx, JSClass *clasp, JSObject *proto,
-                                JSObject *parent);
+                                bool uniqueType, JSObject *parent);
 
 inline JSBool
 xpc_SameScope(XPCWrappedNativeScope *objectscope,
@@ -4394,6 +4444,7 @@ struct CompartmentPrivate
     JSObject2JSObjectMap *waiverWrapperMap;
     // NB: we don't want this map to hold a strong reference to the wrapper.
     nsDataHashtable<nsPtrHashKey<XPCWrappedNative>, JSObject *> *expandoMap;
+    nsCString location;
 
     bool RegisterExpandoObject(XPCWrappedNative *wn, JSObject *expando) {
         if (!expandoMap) {

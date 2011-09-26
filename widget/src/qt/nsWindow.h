@@ -348,8 +348,7 @@ private:
     nsEventStatus      DispatchCommandEvent(nsIAtom* aCommand);
     nsEventStatus      DispatchContentCommandEvent(PRInt32 aMsg);
     MozQWidget*        createQWidget(MozQWidget *parent, nsWidgetInitData *aInitData);
-
-    PRBool             IsAcceleratedQView(QGraphicsView* aView);
+    void               SetSoftwareKeyboardState(PRBool aOpen);
 
     MozQWidget*        mWidget;
 

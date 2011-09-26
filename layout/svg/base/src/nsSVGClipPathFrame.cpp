@@ -255,7 +255,7 @@ nsSVGClipPathFrame::IsValid()
     nsIAtom *type = kid->GetType();
 
     if (type == nsGkAtoms::svgUseFrame) {
-      for (nsIFrame* grandKid = kid->GetFirstChild(nsnull); grandKid;
+      for (nsIFrame* grandKid = kid->GetFirstPrincipalChild(); grandKid;
            grandKid = grandKid->GetNextSibling()) {
 
         nsIAtom *type = grandKid->GetType();
@@ -280,10 +280,14 @@ nsSVGClipPathFrame::AttributeChanged(PRInt32         aNameSpaceID,
                                      nsIAtom*        aAttribute,
                                      PRInt32         aModType)
 {
-  if (aNameSpaceID == kNameSpaceID_None &&
-      aAttribute == nsGkAtoms::transform) {
-    nsSVGUtils::NotifyChildrenOfSVGChange(this,
-                                          nsISVGChildFrame::TRANSFORM_CHANGED);
+  if (aNameSpaceID == kNameSpaceID_None) {
+    if (aAttribute == nsGkAtoms::transform) {
+      nsSVGUtils::NotifyChildrenOfSVGChange(this,
+                                            nsISVGChildFrame::TRANSFORM_CHANGED);
+    }
+    if (aAttribute == nsGkAtoms::clipPathUnits) {
+      nsSVGEffects::InvalidateRenderingObservers(this);
+    }
   }
 
   return nsSVGClipPathFrameBase::AttributeChanged(aNameSpaceID,

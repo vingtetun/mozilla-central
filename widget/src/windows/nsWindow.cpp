@@ -119,7 +119,7 @@
 #include "mozilla/WidgetTraceEvent.h"
 #include "nsIAppShell.h"
 #include "nsISupportsPrimitives.h"
-#include "nsIDOMNSUIEvent.h"
+#include "nsIDOMMouseEvent.h"
 #include "nsITheme.h"
 #include "nsIObserverService.h"
 #include "nsIScreenManager.h"
@@ -133,7 +133,6 @@
 #include "nsILocalFile.h"
 #include "nsFontMetrics.h"
 #include "nsIFontEnumerator.h"
-#include "nsILookAndFeel.h"
 #include "nsGUIEvent.h"
 #include "nsFont.h"
 #include "nsRect.h"
@@ -156,7 +155,9 @@
 #include "nsWindowGfx.h"
 #include "gfxWindowsPlatform.h"
 #include "Layers.h"
+#include "nsPrintfCString.h"
 #include "mozilla/Preferences.h"
+#include "nsISound.h"
 
 #ifdef MOZ_ENABLE_D3D9_LAYER
 #include "LayerManagerD3D9.h"
@@ -186,9 +187,8 @@
 #endif // !defined(WINABLEAPI)
 #endif // defined(ACCESSIBILITY)
 
-#if MOZ_WINSDK_TARGETVER >= MOZ_NTDDI_WIN7
 #include "nsIWinTaskbar.h"
-#endif
+#define NS_TASKBAR_CONTRACTID "@mozilla.org/windows-taskbar;1"
 
 #if defined(NS_ENABLE_TSF)
 #include "nsTextStore.h"
@@ -533,6 +533,11 @@ nsWindow::Create(nsIWidget *aParent,
   if (mWindowType == eWindowType_popup) {
     if (!aParent)
       parent = NULL;
+
+    if (aInitData->mIsDragPopup) {
+      // This flag makes the window transparent to mouse events
+      extendedStyle |= WS_EX_TRANSPARENT;
+    }
   } else if (mWindowType == eWindowType_invisible) {
     // Make sure CreateWindowEx succeeds at creating a toplevel window
     style &= ~0x40000000; // WS_CHILDWINDOW
@@ -553,6 +558,12 @@ nsWindow::Create(nsIWidget *aParent,
     GetWindowPopupClass(className);
   } else {
     GetWindowClass(className);
+  }
+  // Plugins are created in the disabled state so that they can't
+  // steal focus away from our main window.  This is especially
+  // important if the plugin has loaded in a background tab.
+  if(aInitData->mWindowType == eWindowType_plugin) {
+    style |= WS_DISABLED;
   }
   mWnd = ::CreateWindowExW(extendedStyle,
                            className.get(),
@@ -657,8 +668,8 @@ nsWindow::Create(nsIWidget *aParent,
 // Close this nsWindow
 NS_METHOD nsWindow::Destroy()
 {
-  // WM_DESTROY has already fired, we're done.
-  if (nsnull == mWnd)
+  // WM_DESTROY has already fired, avoid calling it twice
+  if (mOnDestroyCalled)
     return NS_OK;
 
   // During the destruction of all of our children, make sure we don't get deleted.
@@ -2691,12 +2702,21 @@ NS_METHOD nsWindow::Invalidate(const nsIntRect & aRect, PRBool aIsSynchronous)
 NS_IMETHODIMP
 nsWindow::MakeFullScreen(PRBool aFullScreen)
 {
+  // taskbarInfo will be NULL pre Windows 7 until Bug 680227 is resolved.
+  nsCOMPtr<nsIWinTaskbar> taskbarInfo =
+    do_GetService(NS_TASKBAR_CONTRACTID);
+
   mFullscreenMode = aFullScreen;
   if (aFullScreen) {
     if (mSizeMode == nsSizeMode_Fullscreen)
       return NS_OK;
     mOldSizeMode = mSizeMode;
     SetSizeMode(nsSizeMode_Fullscreen);
+
+    // Notify the taskbar that we will be entering full screen mode.
+    if (taskbarInfo) {
+      taskbarInfo->PrepareFullScreenHWND(mWnd, TRUE);
+    }
   } else {
     SetSizeMode(mOldSizeMode);
   }
@@ -2715,6 +2735,11 @@ nsWindow::MakeFullScreen(PRBool aFullScreen)
   if (visible) {
     Show(PR_TRUE);
     Invalidate(PR_FALSE);
+  }
+
+  // Notify the taskbar that we have exited full screen mode.
+  if (!aFullScreen && taskbarInfo) {
+    taskbarInfo->PrepareFullScreenHWND(mWnd, FALSE);
   }
 
   // Let the dom know via web shell window
@@ -2779,6 +2804,7 @@ void* nsWindow::GetNativeData(PRUint32 aDataType)
     case NS_NATIVE_PLUGIN_PORT:
     case NS_NATIVE_WIDGET:
     case NS_NATIVE_WINDOW:
+    case NS_NATIVE_SHAREABLE_WINDOW:
       return (void*)mWnd;
     case NS_NATIVE_GRAPHIC:
       // XXX:  This is sleezy!!  Remember to Release the DC after using it!
@@ -6131,7 +6157,10 @@ void nsWindow::ActivateOtherWindowHelper(HWND aWnd)
 
   // Play the minimize sound while we're here, since that is also
   // forgotten when we use SW_SHOWMINIMIZED.
-  ::PlaySoundW(L"Minimize", nsnull, SND_ALIAS | SND_NODEFAULT | SND_ASYNC);
+  nsCOMPtr<nsISound> sound(do_CreateInstance("@mozilla.org/sound;1"));
+  if (sound) {
+    sound->PlaySystemSound(NS_LITERAL_STRING("Minimize"));
+  }
 }
 
 void nsWindow::OnWindowPosChanging(LPWINDOWPOS& info)
@@ -6242,7 +6271,7 @@ PRBool nsWindow::OnTouch(WPARAM wParam, LPARAM lParam)
       touchPoint.ScreenToClient(mWnd);
 
       nsMozTouchEvent touchEvent(PR_TRUE, msg, this, pInputs[i].dwID);
-      touchEvent.inputSource = nsIDOMNSMouseEvent::MOZ_SOURCE_TOUCH;
+      touchEvent.inputSource = nsIDOMMouseEvent::MOZ_SOURCE_TOUCH;
       touchEvent.refPoint = touchPoint;
 
       nsEventStatus status;
@@ -6274,7 +6303,7 @@ PRBool nsWindow::OnGesture(WPARAM wParam, LPARAM lParam)
     event.isAlt     = IS_VK_DOWN(NS_VK_ALT);
     event.button    = 0;
     event.time      = ::GetMessageTime();
-    event.inputSource = nsIDOMNSMouseEvent::MOZ_SOURCE_TOUCH;
+    event.inputSource = nsIDOMMouseEvent::MOZ_SOURCE_TOUCH;
 
     PRBool endFeedback = PR_TRUE;
 
@@ -6315,7 +6344,7 @@ PRBool nsWindow::OnGesture(WPARAM wParam, LPARAM lParam)
   event.isAlt     = IS_VK_DOWN(NS_VK_ALT);
   event.button    = 0;
   event.time      = ::GetMessageTime();
-  event.inputSource = nsIDOMNSMouseEvent::MOZ_SOURCE_TOUCH;
+  event.inputSource = nsIDOMMouseEvent::MOZ_SOURCE_TOUCH;
 
   nsEventStatus status;
   DispatchEvent(&event, status);
@@ -6331,11 +6360,11 @@ PRBool nsWindow::OnGesture(WPARAM wParam, LPARAM lParam)
 
 PRUint16 nsWindow::GetMouseInputSource()
 {
-  PRUint16 inputSource = nsIDOMNSMouseEvent::MOZ_SOURCE_MOUSE;
+  PRUint16 inputSource = nsIDOMMouseEvent::MOZ_SOURCE_MOUSE;
   LPARAM lParamExtraInfo = ::GetMessageExtraInfo();
   if ((lParamExtraInfo & TABLET_INK_SIGNATURE) == TABLET_INK_CHECK) {
     inputSource = (lParamExtraInfo & TABLET_INK_TOUCH) ?
-                  PRUint16(nsIDOMNSMouseEvent::MOZ_SOURCE_TOUCH) : nsIDOMNSMouseEvent::MOZ_SOURCE_PEN;
+                  PRUint16(nsIDOMMouseEvent::MOZ_SOURCE_TOUCH) : nsIDOMMouseEvent::MOZ_SOURCE_PEN;
   }
   return inputSource;
 }
@@ -7298,6 +7327,17 @@ nsWindow::SetWindowClipRegion(const nsTArray<nsIntRect>& aRects,
     }
   }
 
+  // If a plugin is not visibile, especially if it is in a background tab,
+  // it should not be able to steal keyboard focus.  This code checks whether
+  // the region that the plugin is being clipped to is NULLREGION.  If it is,
+  // the plugin window gets disabled.
+  if(mWindowType == eWindowType_plugin) {
+    if(NULLREGION == ::CombineRgn(dest, dest, dest, RGN_OR)) {
+      ::EnableWindow(mWnd, FALSE);
+    } else {
+      ::EnableWindow(mWnd, TRUE);
+    }
+  }
   if (!::SetWindowRgn(mWnd, dest, TRUE)) {
     ::DeleteObject(dest);
     return NS_ERROR_FAILURE;
