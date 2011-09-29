@@ -60,7 +60,11 @@ else
 ifeq ($(MOZ_WIDGET_TOOLKIT),android)
 OSDIR		= android
 else
+ifeq ($(MOZ_WIDGET_TOOLKIT),b2g)
+OSDIR		= b2g
+else
 OSDIR		= unix
+endif
 endif
 endif
 endif

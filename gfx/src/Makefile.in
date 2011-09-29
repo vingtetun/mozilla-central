@@ -109,6 +109,10 @@ ifeq ($(MOZ_WIDGET_TOOLKIT),android)
 CPPSRCS += nsSystemFontsAndroid.cpp
 endif
 
+ifeq ($(MOZ_WIDGET_TOOLKIT),b2g)
+CPPSRCS += nsSystemFontsAndroid.cpp
+endif
+
 ifeq ($(MOZ_WIDGET_TOOLKIT),cocoa)
 CMMSRCS = nsSystemFontsMac.mm
 endif

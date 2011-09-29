@@ -735,7 +735,7 @@ PluginModuleParent::EndUpdateBackground(NPP instance,
     return i->EndUpdateBackground(aCtx, aRect);
 }
 
-#if defined(XP_UNIX) && !defined(XP_MACOSX)
+#if defined(XP_UNIX) && !defined(XP_MACOSX) && !defined(MOZ_WIDGET_B2G)
 nsresult
 PluginModuleParent::NP_Initialize(NPNetscapeFuncs* bFuncs, NPPluginFuncs* pFuncs, NPError* error)
 {
