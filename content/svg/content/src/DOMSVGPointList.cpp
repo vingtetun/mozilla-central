@@ -88,7 +88,7 @@ NS_INTERFACE_MAP_END
 /* static */ already_AddRefed<DOMSVGPointList>
 DOMSVGPointList::GetDOMWrapper(void *aList,
                                nsSVGElement *aElement,
-                               PRBool aIsAnimValList)
+                               bool aIsAnimValList)
 {
   DOMSVGPointList *wrapper =
     sSVGPointListTearoffTable.GetTearoff(aList);
@@ -174,7 +174,7 @@ DOMSVGPointList::InternalListWillChangeTo(const SVGPointList& aNewValue)
   }
 }
 
-PRBool
+bool
 DOMSVGPointList::AttrIsAnimating() const
 {
   return const_cast<DOMSVGPointList*>(this)->InternalAList().IsAnimating();
@@ -233,7 +233,7 @@ DOMSVGPointList::Clear()
     }
 
     InternalList().Clear();
-    Element()->DidChangePointList(PR_TRUE);
+    Element()->DidChangePointList(true);
 #ifdef MOZ_SMIL
     if (AttrIsAnimating()) {
       Element()->AnimationNeedsResample();
@@ -326,7 +326,7 @@ DOMSVGPointList::InsertItemBefore(nsIDOMSVGPoint *aNewItem,
 
   UpdateListIndicesFromIndex(mItems, aIndex + 1);
 
-  Element()->DidChangePointList(PR_TRUE);
+  Element()->DidChangePointList(true);
 #ifdef MOZ_SMIL
   if (AttrIsAnimating()) {
     Element()->AnimationNeedsResample();
@@ -370,7 +370,7 @@ DOMSVGPointList::ReplaceItem(nsIDOMSVGPoint *aNewItem,
   // would end up reading bad data from InternalList()!
   domItem->InsertingIntoList(this, aIndex, IsAnimValList());
 
-  Element()->DidChangePointList(PR_TRUE);
+  Element()->DidChangePointList(true);
 #ifdef MOZ_SMIL
   if (AttrIsAnimating()) {
     Element()->AnimationNeedsResample();
@@ -411,7 +411,7 @@ DOMSVGPointList::RemoveItem(PRUint32 aIndex,
 
   UpdateListIndicesFromIndex(mItems, aIndex);
 
-  Element()->DidChangePointList(PR_TRUE);
+  Element()->DidChangePointList(true);
 #ifdef MOZ_SMIL
   if (AttrIsAnimating()) {
     Element()->AnimationNeedsResample();

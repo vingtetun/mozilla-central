@@ -115,8 +115,10 @@ function teststylePanels() {
   for (let i = 0, max = stylePanels.length; i < max; i++) {
     ok(stylePanels[i], "style inspector instance " + i +
        " correctly initialized");
-    ok(stylePanels[i].isOpen(), "style inspector " + i + " is open");
+    is(stylePanels[i].state, "open", "style inspector " + i + " is open");
 
+/*  // the following should be tested elsewhere
+    // TODO bug 696166
     let htmlTree = stylePanels[i].cssHtmlTree;
     let cssLogic = htmlTree.cssLogic;
     let elt = eltArray[i];
@@ -149,6 +151,7 @@ function teststylePanels() {
         is(selector, "#container", "correct best match for #container");
         is(value, "fantasy", "correct css property value for #" + eltId);
     }
+*/
   }
 
   info("hiding stylePanels[1]");
@@ -160,9 +163,9 @@ function teststylePanels() {
 function styleInspectorClosedByHide()
 {
   Services.obs.removeObserver(styleInspectorClosedByHide, "StyleInspector-closed", false);
-  ok(stylePanels[0].isOpen(), "instance stylePanels[0] is still open");
-  ok(!stylePanels[1].isOpen(), "instance stylePanels[1] is hidden");
-  ok(stylePanels[2].isOpen(), "instance stylePanels[2] is still open");
+  is(stylePanels[0].state, "open", "instance stylePanels[0] is still open");
+  is(stylePanels[1].state, "closed", "instance stylePanels[1] is hidden");
+  is(stylePanels[2].state, "open", "instance stylePanels[2] is still open");
 
   info("closing web console");
   Services.obs.addObserver(styleInspectorClosedFromConsole1,
@@ -174,26 +177,18 @@ function styleInspectorClosedFromConsole1()
 {
   Services.obs.removeObserver(styleInspectorClosedFromConsole1,
                               "StyleInspector-closed", false);
-  info("Style Inspector 1 closed");
-  Services.obs.addObserver(styleInspectorClosedFromConsole2,
-                           "StyleInspector-closed", false);
-}
-
-function styleInspectorClosedFromConsole2()
-{
-  Services.obs.removeObserver(styleInspectorClosedFromConsole2,
-                              "StyleInspector-closed", false);
-  info("Style Inspector 2 closed");
+  info("Style Inspector 1 and 2 closed");
   executeSoon(cleanUp);
 }
 
 function cleanUp()
 {
-  let popupSet = document.getElementById("mainPopupSet");
-  ok(!popupSet.lastChild.hasAttribute("hudToolId"),
+  let panels = document.querySelector("panel[hudToolId]");
+  ok(!panels,
      "all style inspector panels are now detached and ready for garbage collection");
 
   info("cleaning up");
+
   doc = hudBox = stylePanels = jsterm = null;
   finishTest();
 }

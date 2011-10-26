@@ -48,24 +48,24 @@ public:
   void Init(PRUint8 aAttrEnum) {
     mAnimVal = nsnull;
     mAttrEnum = aAttrEnum;
-    mIsBaseSet = PR_FALSE;
+    mIsBaseSet = false;
   }
 
   void SetBaseValue(const nsAString& aValue,
                     nsSVGElement *aSVGElement,
-                    PRBool aDoSetAttr);
-  void GetBaseValue(nsAString& aValue, nsSVGElement *aSVGElement) const
+                    bool aDoSetAttr);
+  void GetBaseValue(nsAString& aValue, const nsSVGElement *aSVGElement) const
     { aSVGElement->GetStringBaseValue(mAttrEnum, aValue); }
 
   void SetAnimValue(const nsAString& aValue, nsSVGElement *aSVGElement);
   void GetAnimValue(nsAString& aValue, const nsSVGElement *aSVGElement) const;
 
-  // Returns PR_TRUE if the animated value of this string has been explicitly
+  // Returns true if the animated value of this string has been explicitly
   // set (either by animation, or by taking on the base value which has been
-  // explicitly set by markup or a DOM call), PR_FALSE otherwise.
-  // If this returns PR_FALSE, the animated value is still valid, that is,
+  // explicitly set by markup or a DOM call), false otherwise.
+  // If this returns false, the animated value is still valid, that is,
   // useable, and represents the default base value of the attribute.
-  PRBool IsExplicitlySet() const
+  bool IsExplicitlySet() const
     { return !!mAnimVal || mIsBaseSet; }
 
   nsresult ToDOMAnimatedString(nsIDOMSVGAnimatedString **aResult,
@@ -79,7 +79,7 @@ private:
 
   nsAutoPtr<nsString> mAnimVal;
   PRUint8 mAttrEnum; // element specified tracking for attribute
-  PRPackedBool mIsBaseSet;
+  bool mIsBaseSet;
 
 public:
   struct DOMAnimatedString : public nsIDOMSVGAnimatedString
@@ -96,7 +96,7 @@ public:
     NS_IMETHOD GetBaseVal(nsAString & aResult)
       { mVal->GetBaseValue(aResult, mSVGElement); return NS_OK; }
     NS_IMETHOD SetBaseVal(const nsAString & aValue)
-      { mVal->SetBaseValue(aValue, mSVGElement, PR_TRUE); return NS_OK; }
+      { mVal->SetBaseValue(aValue, mSVGElement, true); return NS_OK; }
 
     NS_IMETHOD GetAnimVal(nsAString & aResult)
     { 
@@ -124,7 +124,7 @@ public:
     virtual nsresult ValueFromString(const nsAString& aStr,
                                      const nsISMILAnimationElement *aSrcElement,
                                      nsSMILValue& aValue,
-                                     PRBool& aPreventCachingOfSandwich) const;
+                                     bool& aPreventCachingOfSandwich) const;
     virtual nsSMILValue GetBaseValue() const;
     virtual void ClearAnimValue();
     virtual nsresult SetAnimValue(const nsSMILValue& aValue);

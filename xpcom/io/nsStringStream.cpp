@@ -87,7 +87,7 @@ public:
         : mData(nsnull)
         , mOffset(0)
         , mLength(0)
-        , mOwned(PR_FALSE)
+        , mOwned(false)
     {}
 
 private:
@@ -115,7 +115,7 @@ private:
     const char*    mData;
     PRUint32       mOffset;
     PRUint32       mLength;
-    PRPackedBool   mOwned;
+    bool           mOwned;
 };
 
 // This class needs to support threadsafe refcounting since people often
@@ -211,7 +211,7 @@ nsStringInputStream::AdoptData(char *data, PRInt32 dataLen)
     
     mData = data;
     mLength = dataLen;
-    mOwned = PR_TRUE;
+    mOwned = true;
     return NS_OK;
 }
 
@@ -227,7 +227,7 @@ nsStringInputStream::ShareData(const char *data, PRInt32 dataLen)
     
     mData = data;
     mLength = dataLen;
-    mOwned = PR_FALSE;
+    mOwned = false;
     return NS_OK;
 }
 
@@ -241,7 +241,7 @@ nsStringInputStream::Close()
     Clear();
     mData = nsnull;
     mLength = 0;
-    mOwned = PR_FALSE;
+    mOwned = false;
     return NS_OK;
 }
     
@@ -293,9 +293,9 @@ nsStringInputStream::ReadSegments(nsWriteSegmentFun writer, void *closure,
 }
     
 NS_IMETHODIMP
-nsStringInputStream::IsNonBlocking(PRBool *aNonBlocking)
+nsStringInputStream::IsNonBlocking(bool *aNonBlocking)
 {
-    *aNonBlocking = PR_TRUE;
+    *aNonBlocking = true;
     return NS_OK;
 }
 
@@ -359,7 +359,7 @@ nsStringInputStream::SetEOF()
 // nsIIPCSerializable implementation
 /////////
 
-PRBool
+bool
 nsStringInputStream::Read(const IPC::Message *aMsg, void **aIter)
 {
     using IPC::ReadParam;
@@ -367,13 +367,13 @@ nsStringInputStream::Read(const IPC::Message *aMsg, void **aIter)
     nsCAutoString value;
 
     if (!ReadParam(aMsg, aIter, &value))
-        return PR_FALSE;
+        return false;
 
     nsresult rv = SetData(value.get(), value.Length());
     if (NS_FAILED(rv))
-        return PR_FALSE;
+        return false;
 
-    return PR_TRUE;
+    return true;
 }
 
 void

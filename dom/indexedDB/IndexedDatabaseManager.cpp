@@ -149,14 +149,20 @@ class DelayedSetVersion : public nsRunnable
 {
 public:
   DelayedSetVersion(IDBDatabase* aDatabase,
-                    IDBVersionChangeRequest* aRequest,
-                    const nsAString& aVersion,
+                    IDBOpenDBRequest* aRequest,
+                    PRInt64 aOldVersion,
+                    PRInt64 aNewVersion,
                     AsyncConnectionHelper* aHelper)
   : mDatabase(aDatabase),
     mRequest(aRequest),
-    mVersion(aVersion),
+    mOldVersion(aOldVersion),
+    mNewVersion(aNewVersion),
     mHelper(aHelper)
-  { }
+  {
+    NS_ASSERTION(aDatabase, "Null database!");
+    NS_ASSERTION(aRequest, "Null request!");
+    NS_ASSERTION(aHelper, "Null helper!");
+  }
 
   NS_IMETHOD Run()
   {
@@ -165,7 +171,8 @@ public:
     IndexedDatabaseManager* mgr = IndexedDatabaseManager::Get();
     NS_ASSERTION(mgr, "This should never be null!");
 
-    nsresult rv = mgr->SetDatabaseVersion(mDatabase, mRequest, mVersion,
+    nsresult rv = mgr->SetDatabaseVersion(mDatabase, mRequest,
+                                          mOldVersion, mNewVersion,
                                           mHelper);
     NS_ENSURE_SUCCESS(rv, rv);
 
@@ -174,8 +181,9 @@ public:
 
 private:
   nsRefPtr<IDBDatabase> mDatabase;
-  nsRefPtr<IDBVersionChangeRequest> mRequest;
-  nsString mVersion;
+  nsRefPtr<IDBOpenDBRequest> mRequest;
+  PRInt64 mOldVersion;
+  PRInt64 mNewVersion;
   nsRefPtr<AsyncConnectionHelper> mHelper;
 };
 
@@ -187,12 +195,14 @@ class VersionChangeEventsRunnable : public nsRunnable
 public:
   VersionChangeEventsRunnable(
                             IDBDatabase* aRequestingDatabase,
-                            IDBVersionChangeRequest* aRequest,
+                            IDBOpenDBRequest* aRequest,
                             nsTArray<nsRefPtr<IDBDatabase> >& aWaitingDatabases,
-                            const nsAString& aVersion)
+                            PRInt64 aOldVersion,
+                            PRInt64 aNewVersion)
   : mRequestingDatabase(aRequestingDatabase),
     mRequest(aRequest),
-    mVersion(aVersion)
+    mOldVersion(aOldVersion),
+    mNewVersion(aNewVersion)
   {
     NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
     NS_ASSERTION(aRequestingDatabase, "Null pointer!");
@@ -227,10 +237,11 @@ public:
       }
 
       // Otherwise fire a versionchange event.
-      nsCOMPtr<nsIDOMEvent> event(IDBVersionChangeEvent::Create(mVersion));
+      nsRefPtr<nsDOMEvent> event = 
+        IDBVersionChangeEvent::Create(mOldVersion, mNewVersion);
       NS_ENSURE_TRUE(event, NS_ERROR_FAILURE);
 
-      PRBool dummy;
+      bool dummy;
       database->DispatchEvent(event, &dummy);
     }
 
@@ -238,11 +249,11 @@ public:
     // then fire the blocked event.
     for (PRUint32 index = 0; index < mWaitingDatabases.Length(); index++) {
       if (!mWaitingDatabases[index]->IsClosed()) {
-        nsCOMPtr<nsIDOMEvent> event =
-          IDBVersionChangeEvent::CreateBlocked(mVersion);
+        nsRefPtr<nsDOMEvent> event =
+          IDBVersionChangeEvent::CreateBlocked(mOldVersion, mNewVersion);
         NS_ENSURE_TRUE(event, NS_ERROR_FAILURE);
 
-        PRBool dummy;
+        bool dummy;
         mRequest->DispatchEvent(event, &dummy);
 
         break;
@@ -254,9 +265,10 @@ public:
 
 private:
   nsRefPtr<IDBDatabase> mRequestingDatabase;
-  nsRefPtr<IDBVersionChangeRequest> mRequest;
+  nsRefPtr<IDBOpenDBRequest> mRequest;
   nsTArray<nsRefPtr<IDBDatabase> > mWaitingDatabases;
-  nsString mVersion;
+  PRInt64 mOldVersion;
+  PRInt64 mNewVersion;
 };
 
 } // anonymous namespace
@@ -322,14 +334,14 @@ IndexedDatabaseManager::GetOrCreate()
 
     // We need this callback to know when to shut down all our threads.
     nsresult rv = obs->AddObserver(instance, NS_XPCOM_SHUTDOWN_OBSERVER_ID,
-                                   PR_FALSE);
+                                   false);
     NS_ENSURE_SUCCESS(rv, nsnull);
 
     // We don't really need this callback but we want the observer service to
     // hold us alive until XPCOM shutdown. That way other consumers can continue
     // to use this service until shutdown.
     rv = obs->AddObserver(instance, NS_XPCOM_SHUTDOWN_THREADS_OBSERVER_ID,
-                          PR_FALSE);
+                          false);
     NS_ENSURE_SUCCESS(rv, nsnull);
 
     // Make a lazy thread for any IO we need (like clearing or enumerating the
@@ -509,8 +521,9 @@ IndexedDatabaseManager::IsShuttingDown()
 
 nsresult
 IndexedDatabaseManager::SetDatabaseVersion(IDBDatabase* aDatabase,
-                                           IDBVersionChangeRequest* aRequest,
-                                           const nsAString& aVersion,
+                                           IDBOpenDBRequest* aRequest,
+                                           PRInt64 aOldVersion,
+                                           PRInt64 aNewVersion,
                                            AsyncConnectionHelper* aHelper)
 {
   NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
@@ -527,7 +540,8 @@ IndexedDatabaseManager::SetDatabaseVersion(IDBDatabase* aDatabase,
         // Same database, just queue this call to run after the current
         // SetVersion transaction completes.
         nsRefPtr<DelayedSetVersion> delayed =
-          new DelayedSetVersion(aDatabase, aRequest, aVersion, aHelper);
+          new DelayedSetVersion(aDatabase, aRequest, aOldVersion, aNewVersion,
+                                aHelper);
         if (!runnable->mDelayedRunnables.AppendElement(delayed)) {
           NS_WARNING("Out of memory!");
           return NS_ERROR_OUT_OF_MEMORY;
@@ -597,7 +611,7 @@ IndexedDatabaseManager::SetDatabaseVersion(IDBDatabase* aDatabase,
 
     nsRefPtr<VersionChangeEventsRunnable> eventsRunnable =
       new VersionChangeEventsRunnable(aDatabase, aRequest, waitingDatabases,
-                                      aVersion);
+                                      aOldVersion, aNewVersion);
 
     rv = NS_DispatchToCurrentThread(eventsRunnable);
     NS_ENSURE_SUCCESS(rv, rv);
@@ -679,19 +693,15 @@ IndexedDatabaseManager::OnDatabaseClosed(IDBDatabase* aDatabase)
 
       // Now run the helper if there are no more live databases.
       if (runnable->mHelper && runnable->mDatabases.IsEmpty()) {
-        // Don't hold the callback alive longer than necessary.
-        nsRefPtr<AsyncConnectionHelper> helper;
-        helper.swap(runnable->mHelper);
+        // At this point, all databases are closed, so no new transactions can
+        // be started.  There may, however, still be outstanding transactions
+        // that have not completed.  We need to wait for those before we
+        // dispatch the helper.
 
-        if (NS_FAILED(helper->DispatchToTransactionPool())) {
-          NS_WARNING("Failed to dispatch to thread pool!");
-        }
+        TransactionThreadPool* pool = TransactionThreadPool::GetOrCreate();
 
-        // Now wait for the transaction to complete. Completing the transaction
-        // will be our cue to remove the SetVersionRunnable from our list and
-        // therefore allow other SetVersion requests to begin.
-        TransactionThreadPool* pool = TransactionThreadPool::Get();
-        NS_ASSERTION(pool, "This should never be null!");
+        nsRefPtr<WaitForTransactionsToFinishRunnable> waitRunnable =
+          new WaitForTransactionsToFinishRunnable(runnable);
 
         // All other databases should be closed, so we only need to wait on this
         // one.
@@ -700,14 +710,35 @@ IndexedDatabaseManager::OnDatabaseClosed(IDBDatabase* aDatabase)
           NS_ERROR("This should never fail!");
         }
 
-        // Use the SetVersionRunnable as the callback.
-        if (!pool->WaitForAllDatabasesToComplete(array, runnable)) {
+        // Use the WaitForTransactionsToFinishRunnable as the callback.
+        if (!pool->WaitForAllDatabasesToComplete(array, waitRunnable)) {
           NS_WARNING("Failed to wait for transaction to complete!");
         }
       }
       break;
     }
   }
+}
+
+void
+IndexedDatabaseManager::UnblockSetVersionRunnable(IDBDatabase* aDatabase)
+{
+  NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+  NS_ASSERTION(aDatabase, "Null pointer!");
+
+  // Check through the list of SetVersionRunnables to find the one we're seeking.
+  for (PRUint32 index = 0; index < mSetVersionRunnables.Length(); index++) {
+    nsRefPtr<SetVersionRunnable>& runnable = mSetVersionRunnables[index];
+
+    if (runnable->mRequestingDatabase->Id() == aDatabase->Id()) {
+      NS_ASSERTION(!runnable->mHelper,
+                 "Why are we unblocking a runnable if the helper didn't run?");
+      NS_DispatchToCurrentThread(runnable);
+      return;
+    }
+  }
+
+  NS_NOTREACHED("How did we get here!");
 }
 
 // static
@@ -748,7 +779,7 @@ IndexedDatabaseManager::EnsureQuotaManagementForDirectory(nsIFile* aDirectory)
 {
 #ifdef DEBUG
   {
-    PRBool correctThread;
+    bool correctThread;
     NS_ASSERTION(NS_SUCCEEDED(mIOThread->IsOnCurrentThread(&correctThread)) &&
                  correctThread,
                  "Running on the wrong thread!");
@@ -788,13 +819,13 @@ IndexedDatabaseManager::EnsureQuotaManagementForDirectory(nsIFile* aDirectory)
 
   // If the directory exists then we need to see if there are any files in it
   // already. We need to tell SQLite about all of them.
-  PRBool exists;
+  bool exists;
   rv = aDirectory->Exists(&exists);
   NS_ENSURE_SUCCESS(rv, rv);
 
   if (exists) {
     // Make sure this really is a directory.
-    PRBool isDirectory;
+    bool isDirectory;
     rv = aDirectory->IsDirectory(&isDirectory);
     NS_ENSURE_SUCCESS(rv, rv);
     NS_ENSURE_TRUE(isDirectory, NS_ERROR_UNEXPECTED);
@@ -803,7 +834,7 @@ IndexedDatabaseManager::EnsureQuotaManagementForDirectory(nsIFile* aDirectory)
     rv = aDirectory->GetDirectoryEntries(getter_AddRefs(entries));
     NS_ENSURE_SUCCESS(rv, rv);
 
-    PRBool hasMore;
+    bool hasMore;
     while (NS_SUCCEEDED((rv = entries->HasMoreElements(&hasMore))) && hasMore) {
       nsCOMPtr<nsISupports> entry;
       rv = entries->GetNext(getter_AddRefs(entry));
@@ -889,7 +920,7 @@ IndexedDatabaseManager::CancelGetUsageForURI(
   for (PRUint32 index = 0; index < mUsageRunnables.Length(); index++) {
     nsRefPtr<AsyncUsageRunnable>& runnable = mUsageRunnables[index];
 
-    PRBool equals;
+    bool equals;
     nsresult rv = runnable->mURI->Equals(aURI, &equals);
     NS_ENSURE_SUCCESS(rv, rv);
 
@@ -1090,10 +1121,10 @@ IndexedDatabaseManager::OriginClearRunnable::Run()
   nsresult rv = IDBFactory::GetDirectoryForOrigin(mOrigin,
                                                   getter_AddRefs(directory));
   if (NS_SUCCEEDED(rv)) {
-    PRBool exists;
+    bool exists;
     rv = directory->Exists(&exists);
     if (NS_SUCCEEDED(rv) && exists) {
-      rv = directory->Remove(PR_TRUE);
+      rv = directory->Remove(true);
     }
   }
   NS_WARN_IF_FALSE(NS_SUCCEEDED(rv), "Failed to remove directory!");
@@ -1161,7 +1192,7 @@ IndexedDatabaseManager::AsyncUsageRunnable::RunInternal()
                                                   getter_AddRefs(directory));
   NS_ENSURE_SUCCESS(rv, rv);
 
-  PRBool exists;
+  bool exists;
   rv = directory->Exists(&exists);
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -1173,7 +1204,7 @@ IndexedDatabaseManager::AsyncUsageRunnable::RunInternal()
     NS_ENSURE_SUCCESS(rv, rv);
 
     if (entries) {
-      PRBool hasMore;
+      bool hasMore;
       while (NS_SUCCEEDED((rv = entries->HasMoreElements(&hasMore))) &&
              hasMore && !mCanceled) {
         nsCOMPtr<nsISupports> entry;
@@ -1266,6 +1297,42 @@ IndexedDatabaseManager::SetVersionRunnable::Run()
   // Let the IndexedDatabaseManager know that the SetVersion transaction has
   // completed.
   mgr->OnSetVersionRunnableComplete(this);
+
+  return NS_OK;
+}
+
+NS_IMPL_THREADSAFE_ISUPPORTS1(IndexedDatabaseManager::WaitForTransactionsToFinishRunnable,
+                              nsIRunnable)
+
+NS_IMETHODIMP
+IndexedDatabaseManager::WaitForTransactionsToFinishRunnable::Run()
+{
+  NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
+
+  // Don't hold the callback alive longer than necessary.
+  nsRefPtr<AsyncConnectionHelper> helper;
+  helper.swap(mRunnable->mHelper);
+
+  nsRefPtr<SetVersionRunnable> runnable;
+  runnable.swap(mRunnable);
+
+  // If the helper has a transaction, dispatch it to the transaction
+  // threadpool.
+  if (helper->HasTransaction()) {
+    if (NS_FAILED(helper->DispatchToTransactionPool())) {
+      NS_WARNING("Failed to dispatch to thread pool!");
+    }
+  }
+  // Otherwise, dispatch it to the IO thread.
+  else {
+    IndexedDatabaseManager* manager = IndexedDatabaseManager::Get();
+    NS_ASSERTION(manager, "We should definitely have a manager here");
+
+    helper->Dispatch(manager->IOThread());
+  }
+
+  // The helper is responsible for calling
+  // IndexedDatabaseManager::UnblockSetVersionRunnable.
 
   return NS_OK;
 }

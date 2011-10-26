@@ -84,7 +84,7 @@ namespace places {
   struct ItemChangeData {
     BookmarkData bookmark;
     nsCString property;
-    PRBool isAnnotation;
+    bool isAnnotation;
     nsCString newValue;
   };
 
@@ -212,7 +212,7 @@ public:
   nsresult CreateContainerWithID(PRInt64 aId, PRInt64 aParent,
                                  const nsACString& aTitle,
                                  const nsAString& aContractId,
-                                 PRBool aIsBookmarkFolder,
+                                 bool aIsBookmarkFolder,
                                  PRInt32* aIndex,
                                  PRInt64* aNewFolder);
 
@@ -223,7 +223,7 @@ public:
    *        The place_id of the location to check against.
    * @return true if it's a real bookmark, false otherwise.
    */
-  PRBool IsRealBookmark(PRInt64 aPlaceId);
+  bool IsRealBookmark(PRInt64 aPlaceId);
 
   /**
    * Fetches information about the specified id from the database.
@@ -362,7 +362,7 @@ private:
   PRInt64 mUnfiledRoot;
   PRInt64 mToolbarRoot;
 
-  nsresult IsBookmarkedInDatabase(PRInt64 aBookmarkID, PRBool* aIsBookmarked);
+  nsresult IsBookmarkedInDatabase(PRInt64 aBookmarkID, bool* aIsBookmarked);
 
   nsresult SetItemDateInternal(mozIStorageStatement* aStatement,
                                PRInt64 aItemId,
@@ -542,7 +542,7 @@ private:
       nsNavBookmarks* bookmarks = nsNavBookmarks::GetBookmarksService();
       NS_ENSURE_TRUE(bookmarks, NS_ERROR_OUT_OF_MEMORY);
       PRInt64 newFolder;
-      return bookmarks->CreateContainerWithID(mID, mParent, mTitle, mType, PR_TRUE,
+      return bookmarks->CreateContainerWithID(mID, mParent, mTitle, mType, true,
                                               &mIndex, &newFolder); 
     }
 
@@ -550,13 +550,13 @@ private:
       return DoTransaction();
     }
 
-    NS_IMETHOD GetIsTransient(PRBool* aResult) {
-      *aResult = PR_FALSE;
+    NS_IMETHOD GetIsTransient(bool* aResult) {
+      *aResult = false;
       return NS_OK;
     }
     
-    NS_IMETHOD Merge(nsITransaction* aTransaction, PRBool* aResult) {
-      *aResult = PR_FALSE;
+    NS_IMETHOD Merge(nsITransaction* aTransaction, bool* aResult) {
+      *aResult = false;
       return NS_OK;
     }
 

@@ -109,6 +109,7 @@ jmethodID AndroidGeckoSurfaceView::jDraw2DBitmapMethod = 0;
 jmethodID AndroidGeckoSurfaceView::jDraw2DBufferMethod = 0;
 jmethodID AndroidGeckoSurfaceView::jGetSoftwareDrawBitmapMethod = 0;
 jmethodID AndroidGeckoSurfaceView::jGetSoftwareDrawBufferMethod = 0;
+jmethodID AndroidGeckoSurfaceView::jGetSurfaceMethod = 0;
 jmethodID AndroidGeckoSurfaceView::jGetHolderMethod = 0;
 
 #define JNI()  (AndroidBridge::JNI())
@@ -183,6 +184,7 @@ AndroidGeckoSurfaceView::InitGeckoSurfaceViewClass(JNIEnv *jEnv)
     jEndDrawingMethod = getMethod("endDrawing", "()V");
     jDraw2DBitmapMethod = getMethod("draw2D", "(Landroid/graphics/Bitmap;II)V");
     jDraw2DBufferMethod = getMethod("draw2D", "(Ljava/nio/ByteBuffer;I)V");
+    jGetSurfaceMethod = getMethod("getSurface", "()Landroid/view/Surface;");
     jGetHolderMethod = getMethod("getHolder", "()Landroid/view/SurfaceHolder;");
 }
 
@@ -340,7 +342,7 @@ AndroidGeckoEvent::ReadCharactersField(JNIEnv *jenv)
 {
     jstring s = (jstring) jenv->GetObjectField(wrapped_obj, jCharactersField);
     if (!s) {
-        mCharacters.SetIsVoid(PR_TRUE);
+        mCharacters.SetIsVoid(true);
         return;
     }
 
@@ -517,6 +519,12 @@ AndroidGeckoSurfaceView::GetSoftwareDrawBuffer()
 }
 
 jobject
+AndroidGeckoSurfaceView::GetSurface()
+{
+    return JNI()->CallObjectMethod(wrapped_obj, jGetSurfaceMethod);
+}
+
+jobject
 AndroidGeckoSurfaceView::GetSurfaceHolder()
 {
     return JNI()->CallObjectMethod(wrapped_obj, jGetHolderMethod);
@@ -561,7 +569,7 @@ AndroidRect::Init(JNIEnv *jenv, jobject jobj)
 nsJNIString::nsJNIString(jstring jstr, JNIEnv *jenv)
 {
     if (!jstr) {
-        SetIsVoid(PR_TRUE);
+        SetIsVoid(true);
         return;
     }
     JNIEnv *jni = jenv;
@@ -570,14 +578,14 @@ nsJNIString::nsJNIString(jstring jstr, JNIEnv *jenv)
     const jchar* jCharPtr = jni->GetStringChars(jstr, NULL);
 
     if (!jCharPtr) {
-        SetIsVoid(PR_TRUE);
+        SetIsVoid(true);
         return;
     }
 
     jsize len = jni->GetStringLength(jstr);
 
     if (len <= 0) {
-        SetIsVoid(PR_TRUE);
+        SetIsVoid(true);
     } else {
         Assign(jCharPtr, len);
     }

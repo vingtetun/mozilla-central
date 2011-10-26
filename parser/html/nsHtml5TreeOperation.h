@@ -68,6 +68,7 @@ enum eHtml5TreeOperation {
   eTreeOpAppendCommentToDocument,
   eTreeOpAppendDoctypeToDocument,
   // Gecko-specific on-pop ops
+  eTreeOpMarkAsBroken,
   eTreeOpRunScript,
   eTreeOpRunScriptAsyncDefer,
   eTreeOpDoneAddingChildren,
@@ -194,7 +195,7 @@ class nsHtml5TreeOperation {
                      nsIAtom* aName, 
                      nsHtml5HtmlAttributes* aAttributes,
                      nsIContent** aTarget,
-                     PRBool aFromNetwork) {
+                     bool aFromNetwork) {
       NS_PRECONDITION(mOpCode == eTreeOpUninitialized,
         "Op code must be uninitialized when initializing.");
       NS_PRECONDITION(aName, "Initialized tree op with null name.");
@@ -291,7 +292,7 @@ class nsHtml5TreeOperation {
       mInt = aInt;
     }
 
-    inline PRBool IsRunScript() {
+    inline bool IsRunScript() {
       return mOpCode == eTreeOpRunScript;
     }
     

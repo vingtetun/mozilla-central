@@ -223,21 +223,14 @@ gfxASurface::Wrap (cairo_surface_t *csurf)
 }
 
 void
-gfxASurface::Init(cairo_surface_t* surface, PRBool existingSurface)
+gfxASurface::Init(cairo_surface_t* surface, bool existingSurface)
 {
-    if (cairo_surface_status(surface)) {
-        // the surface has an error on it
-        mSurfaceValid = PR_FALSE;
-        cairo_surface_destroy(surface);
-        return;
-    }
-
     SetSurfaceWrapper(surface, this);
 
     mSurface = surface;
-    mSurfaceValid = PR_TRUE;
+    mSurfaceValid = surface && !cairo_surface_status(surface);
 
-    if (existingSurface) {
+    if (existingSurface || !mSurfaceValid) {
         mFloatingRefs = 0;
     } else {
         mFloatingRefs = 1;
@@ -368,18 +361,18 @@ gfxASurface::CairoStatus()
 }
 
 /* static */
-PRBool
+bool
 gfxASurface::CheckSurfaceSize(const gfxIntSize& sz, PRInt32 limit)
 {
     if (sz.width < 0 || sz.height < 0) {
         NS_WARNING("Surface width or height < 0!");
-        return PR_FALSE;
+        return false;
     }
 
     // reject images with sides bigger than limit
     if (limit && (sz.width > limit || sz.height > limit)) {
         NS_WARNING("Surface size too large (exceeds caller's limit)!");
-        return PR_FALSE;
+        return false;
     }
 
 #if defined(XP_MACOSX)
@@ -387,7 +380,7 @@ gfxASurface::CheckSurfaceSize(const gfxIntSize& sz, PRInt32 limit)
     // so clamp all surfaces on the Mac to that height
     if (sz.height > SHRT_MAX) {
         NS_WARNING("Surface size too large (exceeds CoreGraphics limit)!");
-        return PR_FALSE;
+        return false;
     }
 #endif
 
@@ -396,7 +389,7 @@ gfxASurface::CheckSurfaceSize(const gfxIntSize& sz, PRInt32 limit)
     tmp *= sz.height;
     if (!tmp.valid()) {
         NS_WARNING("Surface size too large (would overflow)!");
-        return PR_FALSE;
+        return false;
     }
 
     // assuming 4-byte stride, make sure the allocation size
@@ -404,10 +397,10 @@ gfxASurface::CheckSurfaceSize(const gfxIntSize& sz, PRInt32 limit)
     tmp *= 4;
     if (!tmp.valid()) {
         NS_WARNING("Allocation too large (would overflow)!");
-        return PR_FALSE;
+        return false;
     }
 
-    return PR_TRUE;
+    return true;
 }
 
 /* static */
@@ -481,7 +474,7 @@ gfxASurface::FormatFromContent(gfxASurface::gfxContentType type)
 }
 
 void
-gfxASurface::SetSubpixelAntialiasingEnabled(PRBool aEnabled)
+gfxASurface::SetSubpixelAntialiasingEnabled(bool aEnabled)
 {
 #ifdef MOZ_TREE_CAIRO
     if (!mSurfaceValid)
@@ -491,15 +484,15 @@ gfxASurface::SetSubpixelAntialiasingEnabled(PRBool aEnabled)
 #endif
 }
 
-PRBool
+bool
 gfxASurface::GetSubpixelAntialiasingEnabled()
 {
     if (!mSurfaceValid)
-      return PR_FALSE;
+      return false;
 #ifdef MOZ_TREE_CAIRO
     return cairo_surface_get_subpixel_antialiasing(mSurface) == CAIRO_SUBPIXEL_ANTIALIASING_ENABLED;
 #else
-    return PR_TRUE;
+    return true;
 #endif
 }
 

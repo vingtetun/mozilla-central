@@ -40,6 +40,7 @@ let WeaveGlue = {
   setupData: null,
   jpake: null,
   _bundle: null,
+  _loginError: false,
 
   init: function init() {
     if (this._bundle)
@@ -52,7 +53,6 @@ let WeaveGlue = {
 
     this.setupData = { account: "", password: "" , synckey: "", serverURL: "" };
 
-    // Generating keypairs is expensive on mobile, so disable it
     if (Weave.Status.checkSetup() != Weave.CLIENT_NOT_CONFIGURED) {
       // Put the settings UI into a state of "connecting..." if we are going to auto-connect
       this._elements.connect.firstChild.disabled = true;
@@ -108,6 +108,7 @@ let WeaveGlue = {
     // Show the connect UI
     container.hidden = false;
     document.getElementById("syncsetup-simple").hidden = false;
+    document.getElementById("syncsetup-waiting").hidden = true;
     document.getElementById("syncsetup-fallback").hidden = true;
 
     BrowserUI.pushDialog(this);
@@ -118,6 +119,11 @@ let WeaveGlue = {
         document.getElementById("syncsetup-code1").value = aPin.slice(0, 4);
         document.getElementById("syncsetup-code2").value = aPin.slice(4, 8);
         document.getElementById("syncsetup-code3").value = aPin.slice(8);
+      },
+
+      onPairingStart: function onPairingStart() {
+        document.getElementById("syncsetup-simple").hidden = true;
+        document.getElementById("syncsetup-waiting").hidden = false;
       },
 
       onComplete: function onComplete(aCredentials) {
@@ -253,14 +259,8 @@ let WeaveGlue = {
 
   tryConnect: function login() {
     // If Sync is not configured, simply show the setup dialog
-    if (Weave.Status.checkSetup() == Weave.CLIENT_NOT_CONFIGURED) {
+    if (this._loginError || Weave.Status.checkSetup() == Weave.CLIENT_NOT_CONFIGURED) {
       this.open();
-      return;
-    }
-
-    // If user is already logged-in, try to connect straight away
-    if (Weave.Service.isLoggedIn) {
-      this.connect();
       return;
     }
 
@@ -343,6 +343,7 @@ let WeaveGlue = {
       "weave:service:sync:start", "weave:service:sync:finish",
       "weave:service:sync:error", "weave:service:login:start",
       "weave:service:login:finish", "weave:service:login:error",
+      "weave:ui:login:error",
       "weave:service:logout:finish"];
 
     // For each topic, add WeaveGlue the observer
@@ -397,12 +398,27 @@ let WeaveGlue = {
     let disconnect = this._elements.disconnect;
     let sync = this._elements.sync;
 
-    let loggedIn = Weave.Service.isLoggedIn;
+    // Show what went wrong with login if necessary
+    if (aTopic == "weave:ui:login:error") {
+      this._loginError = true;
+      connect.setAttribute("desc", Weave.Utils.getErrorString(Weave.Status.login));
+    } else {
+      connect.removeAttribute("desc");
+    }
 
-    connect.collapsed = loggedIn;
-    connected.collapsed = !loggedIn;
+    if (aTopic == "weave:service:login:finish") {
+      this._loginError = false;
+      // Init the setup data if we just logged in
+      if (!this.setupData)
+        this.loadSetupData();
+    }
 
-    if (!loggedIn) {
+    let isConfigured = (!this._loginError && Weave.Status.checkSetup() != Weave.CLIENT_NOT_CONFIGURED);
+
+    connect.collapsed = isConfigured;
+    connected.collapsed = !isConfigured;
+
+    if (!isConfigured) {
       connect.setAttribute("title", this._bundle.GetStringFromName("notconnected.label"));
       connect.firstChild.disabled = false;
       details.checked = false;
@@ -440,20 +456,6 @@ let WeaveGlue = {
       let dateStr = this._bundle.formatStringFromName("lastSync2.label", [syncDate], 1);
       sync.setAttribute("title", dateStr);
     }
-
-    // Show what went wrong with login if necessary
-    if (aTopic == "weave:service:login:error") {
-      if (Weave.Status.login == "service.master_password_locked")
-        Weave.Service.logout();
-      else
-        connect.setAttribute("desc", Weave.Utils.getErrorString(Weave.Status.login));
-    } else {
-      connect.removeAttribute("desc");
-    }
-
-    // Init the setup data if we just logged in
-    if (!this.setupData && aTopic == "weave:service:login:finish")
-      this.loadSetupData();
 
     // Check for a storage format update, update the user and load the Sync update page
     if (aTopic =="weave:service:sync:error") {

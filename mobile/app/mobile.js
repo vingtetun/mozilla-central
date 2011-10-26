@@ -375,15 +375,10 @@ pref("privacy.item.geolocation", true);
 pref("privacy.item.siteSettings", true);
 pref("privacy.item.syncAccount", true);
 
-#ifdef MOZ_PLATFORM_MAEMO
 pref("plugins.force.wmode", "opaque");
-#endif
 
 // URL to the Learn More link XXX this is the firefox one.  Bug 495578 fixes this.
 pref("browser.geolocation.warning.infoURL", "http://www.mozilla.com/%LOCALE%/firefox/geolocation/");
-
-// base url for the wifi geolocation network provider
-pref("geo.wifi.uri", "https://maps.googleapis.com/maps/api/browserlocation/json");
 
 // enable geo
 pref("geo.enabled", true);
@@ -440,10 +435,14 @@ pref("browser.ui.touch.weight.visited", 120); // percentage
 // plugins
 #if MOZ_PLATFORM_MAEMO == 6
 pref("plugin.disable", false);
+pref("dom.ipc.plugins.enabled", true);
+#elifdef ANDROID
+pref("plugin.disable", false);
+pref("dom.ipc.plugins.enabled", false);
 #else
 pref("plugin.disable", true);
-#endif
 pref("dom.ipc.plugins.enabled", true);
+#endif
 
 // process priority
 // higher values give content process less CPU time
@@ -611,8 +610,8 @@ pref("image.mem.min_discard_timeout_ms", 10000);
 
 // enable touch events interfaces
 pref("dom.w3c_touch_events.enabled", true);
-pref("dom.w3c_touch_events.safetyX", 0); // escape borders in units of 1/240"
-pref("dom.w3c_touch_events.safetyY", 120); // escape borders in units of 1/240"
+pref("dom.w3c_touch_events.safetyX", 5); // escape borders in units of 1/240"
+pref("dom.w3c_touch_events.safetyY", 20); // escape borders in units of 1/240"
 
 #ifdef MOZ_SAFE_BROWSING
 // Safe browsing does nothing unless this pref is set
@@ -667,7 +666,7 @@ pref("browser.safebrowsing.malware.reportURL", "http://safebrowsing.clients.goog
 
 // True if this is the first time we are showing about:firstrun
 pref("browser.firstrun.show.uidiscovery", true);
-pref("browser.firstrun.show.localepicker", true);
+pref("browser.firstrun.show.localepicker", false);
 
 // True if you always want dump() to work
 //
@@ -678,3 +677,7 @@ pref("browser.firstrun.show.localepicker", true);
 // $ adb shell setprop log.redirect-stdio true
 // $ adb shell start
 pref("browser.dom.window.dump.enabled", false);
+
+// controls if we want camera support
+pref("device.camera.enabled", true);
+pref("media.realtime_decoder.enabled", true);

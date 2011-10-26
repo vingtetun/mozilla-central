@@ -101,10 +101,12 @@ public:
   void PluginCrashed(const nsAString& pluginDumpID,
                      const nsAString& browserDumpID);
   
-  static PRBool RunPluginOOP(const nsPluginTag *aPluginTag);
+  static bool RunPluginOOP(const nsPluginTag *aPluginTag);
 
   nsresult CreatePluginInstance(nsNPAPIPluginInstance **aResult);
   nsresult Shutdown();
+
+  static nsresult RetainStream(NPStream *pstream, nsISupports **aRetainedPeer);
 
 protected:
   NPPluginFuncs mPluginFuncs;

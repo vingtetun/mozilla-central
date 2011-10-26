@@ -39,10 +39,8 @@
 #include "nsSVGContainerFrame.h"
 #include "nsSVGMaskElement.h"
 #include "nsSVGEffects.h"
-#include "nsIDOMSVGMatrix.h"
 #include "gfxContext.h"
 #include "gfxImageSurface.h"
-#include "nsSVGMatrix.h"
 
 //----------------------------------------------------------------------
 // Implementation
@@ -96,7 +94,7 @@ nsSVGMaskFrame::ComputeMaskAlpha(nsSVGRenderState *aContext,
           clipExtents.Width(), clipExtents.Height());
 #endif
 
-  PRBool resultOverflows;
+  bool resultOverflows;
   gfxIntSize surfaceSize =
     nsSVGUtils::ConvertToSurfaceSize(gfxSize(clipExtents.Width(),
                                              clipExtents.Height()),
@@ -118,7 +116,11 @@ nsSVGMaskFrame::ComputeMaskAlpha(nsSVGRenderState *aContext,
   nsSVGRenderState tmpState(image);
 
   mMaskParent = aParent;
-  mMaskParentMatrix = NS_NewSVGMatrix(aMatrix);
+  if (mMaskParentMatrix) {
+    *mMaskParentMatrix = aMatrix;
+  } else {
+    mMaskParentMatrix = new gfxMatrix(aMatrix);
+  }
 
   for (nsIFrame* kid = mFrames.FirstChild(); kid;
        kid = kid->GetNextSibling()) {
@@ -136,7 +138,10 @@ nsSVGMaskFrame::ComputeMaskAlpha(nsSVGRenderState *aContext,
 
   nsIntRect rect(0, 0, surfaceSize.width, surfaceSize.height);
   nsSVGUtils::UnPremultiplyImageDataAlpha(data, stride, rect);
-  nsSVGUtils::ConvertImageDataToLinearRGB(data, stride, rect);
+  if (GetStyleSVG()->mColorInterpolation ==
+      NS_STYLE_COLOR_INTERPOLATION_LINEARRGB) {
+    nsSVGUtils::ConvertImageDataToLinearRGB(data, stride, rect);
+  }
 
   for (PRInt32 y = 0; y < surfaceSize.height; y++)
     for (PRInt32 x = 0; x < surfaceSize.width; x++) {
@@ -156,6 +161,13 @@ nsSVGMaskFrame::ComputeMaskAlpha(nsSVGRenderState *aContext,
   gfxPattern *retval = new gfxPattern(image);
   NS_IF_ADDREF(retval);
   return retval;
+}
+
+/* virtual */ void
+nsSVGMaskFrame::DidSetStyleContext(nsStyleContext* aOldStyleContext)
+{
+  nsSVGEffects::InvalidateRenderingObservers(this);
+  nsSVGMaskFrameBase::DidSetStyleContext(aOldStyleContext);
 }
 
 NS_IMETHODIMP
@@ -203,8 +215,9 @@ nsSVGMaskFrame::GetCanvasTM()
 
   nsSVGMaskElement *mask = static_cast<nsSVGMaskElement*>(mContent);
 
-  return nsSVGUtils::AdjustMatrixForUnits(nsSVGUtils::ConvertSVGMatrixToThebes(mMaskParentMatrix),
-                                          &mask->mEnumAttributes[nsSVGMaskElement::MASKCONTENTUNITS],
-                                          mMaskParent);
+  return nsSVGUtils::AdjustMatrixForUnits(
+    mMaskParentMatrix ? *mMaskParentMatrix : gfxMatrix(),
+    &mask->mEnumAttributes[nsSVGMaskElement::MASKCONTENTUNITS],
+    mMaskParent);
 }
 

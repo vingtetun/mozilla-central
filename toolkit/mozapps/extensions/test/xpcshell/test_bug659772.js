@@ -100,8 +100,11 @@ function run_test_1() {
     do_check_false(a4.isActive);
     do_check_false(isExtensionInAddonsList(profileDir, addon4.id));
 
-    // Prepare the add-on update
-    installAllFiles([do_get_addon("test_bug659772")], function() {
+    // Prepare the add-on update, and a bootstrapped addon (bug 693714)
+    installAllFiles([
+      do_get_addon("test_bug659772"),
+      do_get_addon("test_bootstrap1_1")
+    ], function() {
       shutdownManager();
 
       // Make it look like the next time the app is started it has a new DB schema
@@ -113,6 +116,37 @@ function run_test_1() {
       db.schemaVersion = 1;
       Services.prefs.setIntPref("extensions.databaseSchema", 1);
       db.close();
+
+      let jsonfile = gProfD.clone();
+      jsonfile.append("extensions");
+      jsonfile.append("staged");
+      jsonfile.append("addon3@tests.mozilla.org.json");
+      do_check_true(jsonfile.exists());
+
+      // Remove an unnecessary property from the cached manifest
+      let fis = AM_Cc["@mozilla.org/network/file-input-stream;1"].
+                   createInstance(AM_Ci.nsIFileInputStream);
+      let json = AM_Cc["@mozilla.org/dom/json;1"].
+                 createInstance(AM_Ci.nsIJSON);
+      fis.init(jsonfile, -1, 0, 0);
+      let addonObj = json.decodeFromStream(fis, jsonfile.fileSize);
+      fis.close();
+      delete addonObj.optionsType;
+
+      let stream = AM_Cc["@mozilla.org/network/file-output-stream;1"].
+                   createInstance(AM_Ci.nsIFileOutputStream);
+      let converter = AM_Cc["@mozilla.org/intl/converter-output-stream;1"].
+                      createInstance(AM_Ci.nsIConverterOutputStream);
+      stream.init(jsonfile, FileUtils.MODE_WRONLY | FileUtils.MODE_CREATE |
+                            FileUtils.MODE_TRUNCATE, FileUtils.PERMS_FILE,
+                            0);
+      converter.init(stream, "UTF-8", 0, 0x0000);
+      converter.writeString(JSON.stringify(addonObj));
+      converter.close();
+      stream.close();
+
+      Services.prefs.clearUserPref("bootstraptest.install_reason");
+      Services.prefs.clearUserPref("bootstraptest.uninstall_reason");
 
       startupManager(false);
 
@@ -150,6 +184,10 @@ function run_test_1() {
         do_check_false(a4.userDisabled);
         do_check_false(a4.isActive);
         do_check_false(isExtensionInAddonsList(profileDir, addon4.id));
+
+        // Check that install and uninstall haven't been called on the bootstrapped adddon
+        do_check_false(Services.prefs.prefHasUserValue("bootstraptest.install_reason"));
+        do_check_false(Services.prefs.prefHasUserValue("bootstraptest.uninstall_reason"));
 
         a1.uninstall();
         a2.uninstall();
@@ -207,8 +245,11 @@ function run_test_2() {
     do_check_false(a4.isActive);
     do_check_false(isExtensionInAddonsList(profileDir, addon4.id));
 
-    // Prepare the add-on update
-    installAllFiles([do_get_addon("test_bug659772")], function() {
+    // Prepare the add-on update, and a bootstrapped addon (bug 693714)
+    installAllFiles([
+      do_get_addon("test_bug659772"),
+      do_get_addon("test_bootstrap1_1")
+    ], function() {
       shutdownManager();
 
       // Make it look like the next time the app is started it has a new DB schema
@@ -220,6 +261,37 @@ function run_test_2() {
       db.schemaVersion = 1;
       Services.prefs.setIntPref("extensions.databaseSchema", 1);
       db.close();
+
+      let jsonfile = gProfD.clone();
+      jsonfile.append("extensions");
+      jsonfile.append("staged");
+      jsonfile.append("addon3@tests.mozilla.org.json");
+      do_check_true(jsonfile.exists());
+
+      // Remove an unnecessary property from the cached manifest
+      let fis = AM_Cc["@mozilla.org/network/file-input-stream;1"].
+                   createInstance(AM_Ci.nsIFileInputStream);
+      let json = AM_Cc["@mozilla.org/dom/json;1"].
+                 createInstance(AM_Ci.nsIJSON);
+      fis.init(jsonfile, -1, 0, 0);
+      let addonObj = json.decodeFromStream(fis, jsonfile.fileSize);
+      fis.close();
+      delete addonObj.optionsType;
+
+      let stream = AM_Cc["@mozilla.org/network/file-output-stream;1"].
+                   createInstance(AM_Ci.nsIFileOutputStream);
+      let converter = AM_Cc["@mozilla.org/intl/converter-output-stream;1"].
+                      createInstance(AM_Ci.nsIConverterOutputStream);
+      stream.init(jsonfile, FileUtils.MODE_WRONLY | FileUtils.MODE_CREATE |
+                            FileUtils.MODE_TRUNCATE, FileUtils.PERMS_FILE,
+                            0);
+      converter.init(stream, "UTF-8", 0, 0x0000);
+      converter.writeString(JSON.stringify(addonObj));
+      converter.close();
+      stream.close();
+
+      Services.prefs.clearUserPref("bootstraptest.install_reason");
+      Services.prefs.clearUserPref("bootstraptest.uninstall_reason");
 
       gAppInfo.version = "2";
       startupManager(true);
@@ -258,6 +330,10 @@ function run_test_2() {
         do_check_false(a4.userDisabled);
         do_check_true(a4.isActive);
         do_check_true(isExtensionInAddonsList(profileDir, addon4.id));
+
+        // Check that install and uninstall haven't been called on the bootstrapped adddon
+        do_check_false(Services.prefs.prefHasUserValue("bootstraptest.install_reason"));
+        do_check_false(Services.prefs.prefHasUserValue("bootstraptest.uninstall_reason"));
 
         a1.uninstall();
         a2.uninstall();

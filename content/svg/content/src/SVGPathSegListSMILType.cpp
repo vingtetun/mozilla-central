@@ -84,7 +84,7 @@ SVGPathSegListSMILType::Assign(nsSMILValue& aDest,
   return dest->CopyFrom(*src);
 }
 
-PRBool
+bool
 SVGPathSegListSMILType::IsEqual(const nsSMILValue& aLeft,
                                 const nsSMILValue& aRight) const
 {
@@ -93,21 +93,6 @@ SVGPathSegListSMILType::IsEqual(const nsSMILValue& aLeft,
 
   return *static_cast<const SVGPathDataAndOwner*>(aLeft.mU.mPtr) ==
          *static_cast<const SVGPathDataAndOwner*>(aRight.mU.mPtr);
-}
-
-static PRBool
-ArcFlagsDiffer(SVGPathDataAndOwner::const_iterator aPathData1,
-               SVGPathDataAndOwner::const_iterator aPathData2)
-{
-  NS_ABORT_IF_FALSE
-    (SVGPathSegUtils::IsArcType(SVGPathSegUtils::DecodeType(aPathData1[0])),
-                                "ArcFlagsDiffer called with non-arc segment");
-  NS_ABORT_IF_FALSE
-    (SVGPathSegUtils::IsArcType(SVGPathSegUtils::DecodeType(aPathData2[0])),
-                                "ArcFlagsDiffer called with non-arc segment");
-
-  return aPathData1[LARGE_ARC_FLAG_IDX] != aPathData2[LARGE_ARC_FLAG_IDX] ||
-         aPathData1[SWEEP_FLAG_IDX]     != aPathData2[SWEEP_FLAG_IDX];
 }
 
 enum PathInterpolationResult {
@@ -138,12 +123,6 @@ CanInterpolate(const SVGPathDataAndOwner& aStart,
   while (pStart < pStartDataEnd && pEnd < pEndDataEnd) {
     PRUint32 startType = SVGPathSegUtils::DecodeType(*pStart);
     PRUint32 endType = SVGPathSegUtils::DecodeType(*pEnd);
-
-    if (SVGPathSegUtils::IsArcType(startType) &&
-        SVGPathSegUtils::IsArcType(endType) &&
-        ArcFlagsDiffer(pStart, pEnd)) {
-      return eCannotInterpolate;
-    }
 
     if (startType != endType) {
       if (!SVGPathSegUtils::SameTypeModuloRelativeness(startType, endType)) {
@@ -215,25 +194,22 @@ AddWeightedPathSegs(double aCoeff1,
   NS_ABORT_IF_FALSE(!aSeg1 || SVGPathSegUtils::DecodeType(*aSeg1) == segType,
                     "unexpected segment type");
 
-  // FIRST: Directly copy the arguments that don't make sense to add.
   aResultSeg[0] = aSeg2[0];  // encoded segment type
 
-  PRBool isArcType = SVGPathSegUtils::IsArcType(segType);
-  if (isArcType) {
-    // Copy boolean arc flags.
-    NS_ABORT_IF_FALSE(!aSeg1 || !ArcFlagsDiffer(aSeg1, aSeg2),
-                      "Expecting arc flags to match");
-    aResultSeg[LARGE_ARC_FLAG_IDX] = aSeg2[LARGE_ARC_FLAG_IDX];
-    aResultSeg[SWEEP_FLAG_IDX]     = aSeg2[SWEEP_FLAG_IDX];
-  }
-
-  // SECOND: Add the arguments that are supposed to be added.
+  // FIRST: Add all the arguments.
   // (The 1's below are to account for segment type)
   PRUint32 numArgs = SVGPathSegUtils::ArgCountForType(segType);
   for (PRUint32 i = 1; i < 1 + numArgs; ++i) {
-     // Need to skip arc flags for arc-type segments. (already handled them)
-    if (!(isArcType && (i == LARGE_ARC_FLAG_IDX || i == SWEEP_FLAG_IDX))) {
-      aResultSeg[i] = (aSeg1 ? aCoeff1 * aSeg1[i] : 0.0) + aCoeff2 * aSeg2[i];
+    aResultSeg[i] = (aSeg1 ? aCoeff1 * aSeg1[i] : 0.0) + aCoeff2 * aSeg2[i];
+  }
+
+  // SECOND: ensure non-zero flags become 1.
+  if (SVGPathSegUtils::IsArcType(segType)) {
+    if (aResultSeg[LARGE_ARC_FLAG_IDX] != 0.0f) {
+      aResultSeg[LARGE_ARC_FLAG_IDX] = 1.0f;
+    }
+    if (aResultSeg[SWEEP_FLAG_IDX] != 0.0f) {
+      aResultSeg[SWEEP_FLAG_IDX] = 1.0f;
     }
   }
 
@@ -295,7 +271,7 @@ AddWeightedPathSegLists(double aCoeff1, const SVGPathDataAndOwner& aList1,
   // because in that case, we will have already set iter1 to nsnull above, to
   // record that our first operand is an identity value.)
   if (aResult.IsIdentity()) {
-    DebugOnly<PRBool> success = aResult.SetLength(aList2.Length());
+    DebugOnly<bool> success = aResult.SetLength(aList2.Length());
     NS_ABORT_IF_FALSE(success, "infallible nsTArray::SetLength should succeed");
     aResult.SetElement(aList2.Element()); // propagate target element info!
   }
@@ -514,7 +490,7 @@ SVGPathSegListSMILType::Interpolate(const nsSMILValue& aStartVal,
   if (check == eRequiresConversion) {
     // Can't convert |start| in-place, since it's const. Instead, we copy it
     // into |result|, converting the types as we go, and use that as our start.
-    DebugOnly<PRBool> success = result.SetLength(end.Length());
+    DebugOnly<bool> success = result.SetLength(end.Length());
     NS_ABORT_IF_FALSE(success, "infallible nsTArray::SetLength should succeed");
     result.SetElement(end.Element()); // propagate target element info!
 

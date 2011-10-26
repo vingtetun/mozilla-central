@@ -131,7 +131,7 @@ FetchPageInfo(StatementCache<mozIStorageStatement>& aStmtCache,
                                 _page.spec);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  PRBool hasResult;
+  bool hasResult;
   rv = stmt->ExecuteStep(&hasResult);
   NS_ENSURE_SUCCESS(rv, rv);
   if (!hasResult) {
@@ -141,7 +141,7 @@ FetchPageInfo(StatementCache<mozIStorageStatement>& aStmtCache,
 
   rv = stmt->GetInt64(0, &_page.id);
   NS_ENSURE_SUCCESS(rv, rv);
-  PRBool isNull;
+  bool isNull;
   rv = stmt->GetIsNull(1, &isNull);
   NS_ENSURE_SUCCESS(rv, rv);
   // favicon_id can be NULL.
@@ -210,7 +210,7 @@ FetchIconInfo(StatementCache<mozIStorageStatement>& aStmtCache,
                                 _icon.spec);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  PRBool hasResult;
+  bool hasResult;
   rv = stmt->ExecuteStep(&hasResult);
   NS_ENSURE_SUCCESS(rv, rv);
   if (!hasResult) {
@@ -222,7 +222,7 @@ FetchIconInfo(StatementCache<mozIStorageStatement>& aStmtCache,
   NS_ENSURE_SUCCESS(rv, rv);
 
   // Expiration can be NULL.
-  PRBool isNull;
+  bool isNull;
   rv = stmt->GetIsNull(1, &isNull);
   NS_ENSURE_SUCCESS(rv, rv);
   if (!isNull) {
@@ -272,7 +272,7 @@ FetchIconURL(StatementCache<mozIStorageStatement>& aStmtCache,
                                 aPageSpec);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  PRBool hasResult;
+  bool hasResult;
   if (NS_SUCCEEDED(stmt->ExecuteStep(&hasResult)) && hasResult) {
     rv = stmt->GetUTF8String(0, aIconSpec);
     NS_ENSURE_SUCCESS(rv, rv);
@@ -307,7 +307,7 @@ SniffMimeTypeForIconData(nsIRequest* aRequest,
                                                    getter_AddRefs(sniffers));
   NS_ENSURE_SUCCESS(rv, rv);
 
-  PRBool hasMore = PR_FALSE;
+  bool hasMore = false;
   while (_mimeType.IsEmpty() &&
          NS_SUCCEEDED(sniffers->HasMoreElements(&hasMore)) &&
          hasMore) {
@@ -425,14 +425,14 @@ AsyncFaviconHelperBase::~AsyncFaviconHelperBase()
   nsCOMPtr<nsIThread> thread;
   (void)NS_GetMainThread(getter_AddRefs(thread));
   if (mCallback) {
-    (void)NS_ProxyRelease(thread, mCallback, PR_TRUE);
+    (void)NS_ProxyRelease(thread, mCallback, true);
   }
   if (mFaviconSvc) {
     // Cast mFaviconSvc to nsIFaviconService before passing to NS_ProxyRelease
     // so NS_ProxyRelease can unambiguously cast to nsISupports.
     nsIFaviconService *faviconSvc;
     mFaviconSvc.forget(&faviconSvc);
-    (void)NS_ProxyRelease(thread, faviconSvc, PR_TRUE);
+    (void)NS_ProxyRelease(thread, faviconSvc, true);
   }
 }
 
@@ -455,7 +455,7 @@ AsyncFetchAndSetIconForPage::start(nsIURI* aFaviconURI,
   NS_ENSURE_SUCCESS(rv, rv);
   // URIs can arguably miss a host.
   (void)GetReversedHostname(aPageURI, page.revHost);
-  PRBool canAddToHistory;
+  bool canAddToHistory;
   nsNavHistory* navHistory = nsNavHistory::GetHistoryService();
   NS_ENSURE_TRUE(navHistory, NS_ERROR_OUT_OF_MEMORY);
   rv = navHistory->CanAddURI(aPageURI, &canAddToHistory);
@@ -580,7 +580,7 @@ AsyncFetchAndSetIconFromNetwork::~AsyncFetchAndSetIconFromNetwork()
   nsCOMPtr<nsIThread> thread;
   (void)NS_GetMainThread(getter_AddRefs(thread));
   if (mChannel) {
-    (void)NS_ProxyRelease(thread, mChannel, PR_TRUE);
+    (void)NS_ProxyRelease(thread, mChannel, true);
   }
 }
 
@@ -749,7 +749,7 @@ AsyncAssociateIconToPage::Run()
     NS_ENSURE_SUCCESS(rv, rv);
   }
 
-  mozStorageTransaction transaction(mDBConn, PR_FALSE,
+  mozStorageTransaction transaction(mDBConn, false,
                                     mozIStorageConnection::TRANSACTION_IMMEDIATE);
 
   // If there is no entry for this icon, or the entry is obsolete, replace it.

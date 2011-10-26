@@ -40,7 +40,8 @@
 #if !defined jsjaeger_regstate_h__ && defined JS_METHODJIT
 #define jsjaeger_regstate_h__
 
-#include "jsbit.h"
+#include "mozilla/Util.h"
+
 #include "assembler/assembler/MacroAssembler.h"
 
 namespace js {
@@ -337,8 +338,8 @@ struct Registers {
             JSC::SparcRegisters::o5
         };
 #endif
-        JS_ASSERT(numArgRegs(conv) == JS_ARRAY_LENGTH(regs));
-        if (i > JS_ARRAY_LENGTH(regs))
+        JS_ASSERT(numArgRegs(conv) == mozilla::ArrayLength(regs));
+        if (i > mozilla::ArrayLength(regs))
             return false;
         *reg = regs[i];
         return true;
@@ -416,7 +417,7 @@ struct Registers {
 
     /* Get a register which is not live before a FASTCALL. */
     static inline RegisterID tempCallReg() {
-        Registers regs(AvailRegs);
+        Registers regs(TempRegs);
         regs.takeReg(Registers::ArgReg0);
         regs.takeReg(Registers::ArgReg1);
         return regs.takeAnyReg().reg();

@@ -684,7 +684,7 @@ class DeviceManagerSUT(DeviceManager):
         return None
       # prompt should follow
       read_exact(len(prompt), buffer, 'could not find prompt')
-      print 'DeviceManager: error pulling file: %s' % error_str
+      print "DeviceManager: error pulling file '%s': %s" % (remoteFile, error_str)
       return None
 
     # read file data
@@ -706,7 +706,11 @@ class DeviceManagerSUT(DeviceManager):
     if localFile == '':
       localFile = os.path.join(self.tempRoot, "temp.txt")
   
-    retVal = self.pullFile(remoteFile)
+    try:
+      retVal = self.pullFile(remoteFile)
+    except:
+      return None
+      
     if (retVal is None):
       return None
 

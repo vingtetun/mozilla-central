@@ -36,6 +36,8 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "mozilla/Util.h"
+
 #include <windows.h>
 #include <setupapi.h>
 #include "gfxWindowsPlatform.h"
@@ -54,7 +56,7 @@
 #define NS_CRASHREPORTER_CONTRACTID "@mozilla.org/toolkit/crash-reporter;1"
 #endif
 
-
+using namespace mozilla;
 using namespace mozilla::widget;
 
 #ifdef DEBUG
@@ -80,41 +82,41 @@ GfxInfo::GfxInfo()
     mAdapterVendorID2(0),
     mAdapterDeviceID2(0),
     mWindowsVersion(0),
-    mHasDualGPU(PR_FALSE),
-    mIsGPU2Active(PR_FALSE)
+    mHasDualGPU(false),
+    mIsGPU2Active(false)
 {
 }
 
 /* GetD2DEnabled and GetDwriteEnabled shouldn't be called until after gfxPlatform initialization
  * has occurred because they depend on it for information. (See bug 591561) */
 nsresult
-GfxInfo::GetD2DEnabled(PRBool *aEnabled)
+GfxInfo::GetD2DEnabled(bool *aEnabled)
 {
   *aEnabled = gfxWindowsPlatform::GetPlatform()->GetRenderMode() == gfxWindowsPlatform::RENDER_DIRECT2D;
   return NS_OK;
 }
 
 nsresult
-GfxInfo::GetDWriteEnabled(PRBool *aEnabled)
+GfxInfo::GetDWriteEnabled(bool *aEnabled)
 {
   *aEnabled = gfxWindowsPlatform::GetPlatform()->DWriteEnabled();
   return NS_OK;
 }
 
 nsresult
-GfxInfo::GetAzureEnabled(PRBool *aEnabled)
+GfxInfo::GetAzureEnabled(bool *aEnabled)
 {
-  *aEnabled = PR_FALSE;
+  *aEnabled = false;
 
-  PRBool d2dEnabled = 
+  bool d2dEnabled = 
     gfxWindowsPlatform::GetPlatform()->GetRenderMode() == gfxWindowsPlatform::RENDER_DIRECT2D;
 
   if (d2dEnabled) {
-    PRBool azure = PR_FALSE;
+    bool azure = false;
     nsresult rv = mozilla::Preferences::GetBool("gfx.canvas.azure.enabled", &azure);
 
     if (NS_SUCCEEDED(rv) && azure) {
-      *aEnabled = PR_TRUE;
+      *aEnabled = true;
     }
   }
 
@@ -149,14 +151,14 @@ GfxInfo::GetCleartypeParameters(nsAString & aCleartypeParams)
     ClearTypeParameterInfo& params = clearTypeParams[d];
 
     if (displayNames) {
-      swprintf_s(valStr, NS_ARRAY_LENGTH(valStr),
+      swprintf_s(valStr, ArrayLength(valStr),
                  L"%s [ ", params.displayName.get());
       outStr.Append(valStr);
     }
 
     if (params.gamma >= 0) {
       foundData = true;
-      swprintf_s(valStr, NS_ARRAY_LENGTH(valStr),
+      swprintf_s(valStr, ArrayLength(valStr),
                  L"Gamma: %d ", params.gamma);
       outStr.Append(valStr);
     }
@@ -166,12 +168,12 @@ GfxInfo::GetCleartypeParameters(nsAString & aCleartypeParams)
       if (params.pixelStructure == PIXEL_STRUCT_RGB ||
           params.pixelStructure == PIXEL_STRUCT_BGR)
       {
-        swprintf_s(valStr, NS_ARRAY_LENGTH(valStr),
+        swprintf_s(valStr, ArrayLength(valStr),
                    L"Pixel Structure: %s ",
                    (params.pixelStructure == PIXEL_STRUCT_RGB ?
                       L"RGB" : L"BGR"));
       } else {
-        swprintf_s(valStr, NS_ARRAY_LENGTH(valStr),
+        swprintf_s(valStr, ArrayLength(valStr),
                    L"Pixel Structure: %d ", params.pixelStructure);
       }
       outStr.Append(valStr);
@@ -179,14 +181,14 @@ GfxInfo::GetCleartypeParameters(nsAString & aCleartypeParams)
 
     if (params.clearTypeLevel >= 0) {
       foundData = true;
-      swprintf_s(valStr, NS_ARRAY_LENGTH(valStr),
+      swprintf_s(valStr, ArrayLength(valStr),
                  L"ClearType Level: %d ", params.clearTypeLevel);
       outStr.Append(valStr);
     }
 
     if (params.enhancedContrast >= 0) {
       foundData = true;
-      swprintf_s(valStr, NS_ARRAY_LENGTH(valStr),
+      swprintf_s(valStr, ArrayLength(valStr),
                  L"Enhanced Contrast: %d ", params.enhancedContrast);
       outStr.Append(valStr);
     }
@@ -351,8 +353,8 @@ GfxInfo::Init()
   }
 
   // make sure the string is NULL terminated
-  if (wcsnlen(displayDevice.DeviceKey, NS_ARRAY_LENGTH(displayDevice.DeviceKey))
-      == NS_ARRAY_LENGTH(displayDevice.DeviceKey)) {
+  if (wcsnlen(displayDevice.DeviceKey, ArrayLength(displayDevice.DeviceKey))
+      == ArrayLength(displayDevice.DeviceKey)) {
     // we did not find a NULL
     return rv;
   }
@@ -362,11 +364,11 @@ GfxInfo::Init()
   /* DeviceKey is "reserved" according to MSDN so we'll be careful with it */
   /* check that DeviceKey begins with DEVICE_KEY_PREFIX */
   /* some systems have a DeviceKey starting with \REGISTRY\Machine\ so we need to compare case insenstively */
-  if (_wcsnicmp(displayDevice.DeviceKey, DEVICE_KEY_PREFIX, NS_ARRAY_LENGTH(DEVICE_KEY_PREFIX)-1) != 0)
+  if (_wcsnicmp(displayDevice.DeviceKey, DEVICE_KEY_PREFIX, ArrayLength(DEVICE_KEY_PREFIX)-1) != 0)
     return rv;
 
   // chop off DEVICE_KEY_PREFIX
-  mDeviceKey = displayDevice.DeviceKey + NS_ARRAY_LENGTH(DEVICE_KEY_PREFIX)-1;
+  mDeviceKey = displayDevice.DeviceKey + ArrayLength(DEVICE_KEY_PREFIX)-1;
 
   mDeviceID = displayDevice.DeviceID;
   mDeviceString = displayDevice.DeviceString;
@@ -439,7 +441,7 @@ GfxInfo::Init()
               }
               result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, driverKey.BeginReading(), 0, KEY_QUERY_VALUE, &key);
               if (result == ERROR_SUCCESS) {
-                mHasDualGPU = PR_TRUE;
+                mHasDualGPU = true;
                 mDeviceKey2 = driverKey;
                 dwcbData = sizeof(value);
                 result = RegQueryValueExW(key, L"DriverVersion", NULL, NULL, (LPBYTE)value, &dwcbData);
@@ -488,12 +490,12 @@ GfxInfo::Init()
      PR_sscanf(spoofedVendor, "%x", &mAdapterVendorID);
   }
 
-  mHasDriverVersionMismatch = PR_FALSE;
+  mHasDriverVersionMismatch = false;
   if (mAdapterVendorID == vendorIntel) {
     // we've had big crashers (bugs 590373 and 595364) apparently correlated
     // with bad Intel driver installations where the DriverVersion reported
     // by the registry was not the version of the DLL.
-    PRBool is64bitApp = sizeof(void*) == 8;
+    bool is64bitApp = sizeof(void*) == 8;
     const PRUnichar *dllFileName = is64bitApp
                                  ? L"igd10umd64.dll"
                                  : L"igd10umd32.dll";
@@ -508,7 +510,7 @@ GfxInfo::Init()
     // so if GetDLLVersion failed, we get dllNumericVersion = 0
     // so this test implicitly handles the case where GetDLLVersion failed
     if (dllNumericVersion != driverNumericVersion)
-      mHasDriverVersionMismatch = PR_TRUE;
+      mHasDriverVersionMismatch = true;
   }
 
   const char *spoofedDevice = PR_GetEnv("MOZ_GFX_SPOOF_DEVICE_ID");
@@ -646,7 +648,7 @@ GfxInfo::GetAdapterDeviceID2(PRUint32 *aAdapterDeviceID)
 
 /* readonly attribute boolean isGPU2Active; */
 NS_IMETHODIMP
-GfxInfo::GetIsGPU2Active(PRBool* aIsGPU2Active)
+GfxInfo::GetIsGPU2Active(bool* aIsGPU2Active)
 {
   *aIsGPU2Active = mIsGPU2Active;
   return NS_OK;
@@ -822,7 +824,6 @@ static const PRUint32 deviceFamilyNvidiaBlockD3D9Layers[] = {
     0x0167, /* NV43 [GeForce Go 6200/6400 (TM)] */
     0x0168, /* NV43 [GeForce Go 6200/6400 (TM)] */
     0x0169, /* NV44 [GeForce 6250 (TM)] */
-    0x0221, /* NV44A [GeForce 6200 (TM)] */
     0x0222, /* NV44 [GeForce 6200 A-LE (TM)] */
     0x0240, /* C51PV [GeForce 6150 (TM)] */
     0x0241, /* C51 [GeForce 6150 LE (TM)] */
@@ -972,7 +973,7 @@ nsresult
 GfxInfo::GetFeatureStatusImpl(PRInt32 aFeature, PRInt32 *aStatus, nsAString & aSuggestedDriverVersion, GfxDriverInfo* aDriverInfo /* = nsnull */)
 {
   *aStatus = nsIGfxInfo::FEATURE_NO_INFO;
-  aSuggestedDriverVersion.SetIsVoid(PR_TRUE);
+  aSuggestedDriverVersion.SetIsVoid(true);
 
   PRInt32 status = nsIGfxInfo::FEATURE_NO_INFO;
 

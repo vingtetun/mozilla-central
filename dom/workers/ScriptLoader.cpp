@@ -330,7 +330,7 @@ public:
       // to do a same-origin check. Otherwise we need to clear the load with the
       // security manager.
       rv = mIsWorkerScript ?
-           principal->CheckMayLoad(uri, PR_FALSE):
+           principal->CheckMayLoad(uri, false):
            secMan->CheckLoadURIWithPrincipal(principal, uri, 0);
       NS_ENSURE_SUCCESS(rv, rv);
 
@@ -413,7 +413,7 @@ public:
 
     nsCOMPtr<nsIHttpChannel> httpChannel = do_QueryInterface(request);
     if (httpChannel) {
-      PRBool requestSucceeded;
+      bool requestSucceeded;
       rv = httpChannel->GetRequestSucceeded(&requestSucceeded);
       NS_ENSURE_SUCCESS(rv, rv);
 
@@ -484,7 +484,7 @@ public:
       // URIs we're currently considering all URIs with the URI_IS_UI_RESOURCE
       // flag as valid for creating privileged workers.
       if (!nsContentUtils::IsSystemPrincipal(channelPrincipal)) {
-        PRBool isResource;
+        bool isResource;
         rv = NS_URIChainHasFlags(finalURI,
                                  nsIProtocolHandler::URI_IS_UI_RESOURCE,
                                  &isResource);
@@ -506,7 +506,7 @@ public:
           return NS_ERROR_DOM_BAD_URI;
         }
       }
-      else if (NS_FAILED(loadPrincipal->CheckMayLoad(finalURI, PR_FALSE))) {
+      else if (NS_FAILED(loadPrincipal->CheckMayLoad(finalURI, false))) {
         return NS_ERROR_DOM_BAD_URI;
       }
 

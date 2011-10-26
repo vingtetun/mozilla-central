@@ -247,7 +247,7 @@ AsyncExecuteStatements::shouldNotify()
 #ifdef DEBUG
   mMutex.AssertNotCurrentThreadOwns();
 
-  PRBool onCallingThread = PR_FALSE;
+  bool onCallingThread = false;
   (void)mCallingThread->IsOnCurrentThread(&onCallingThread);
   NS_ASSERTION(onCallingThread, "runEvent not running on the calling thread!");
 #endif
@@ -556,7 +556,7 @@ NS_IMETHODIMP
 AsyncExecuteStatements::Cancel()
 {
 #ifdef DEBUG
-  PRBool onCallingThread = PR_FALSE;
+  bool onCallingThread = false;
   (void)mCallingThread->IsOnCurrentThread(&onCallingThread);
   NS_ASSERTION(onCallingThread, "Not canceling from the calling thread!");
 #endif
@@ -591,7 +591,7 @@ AsyncExecuteStatements::Run()
     return notifyComplete();
 
   if (statementsNeedTransaction()) {
-    mTransactionManager = new mozStorageTransaction(mConnection, PR_FALSE,
+    mTransactionManager = new mozStorageTransaction(mConnection, false,
                                                     mozIStorageConnection::TRANSACTION_IMMEDIATE);
   }
 
