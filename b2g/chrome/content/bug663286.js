@@ -2,19 +2,14 @@
 (function touchEventHandler() {
   var TouchEventHandler = {
     events: ['mousedown', 'mousemove', 'mouseup', 'mouseout', 'unload'],
-    get browser() {
-      delete this.browser;
-      return this.browser = shell.home;
-    },
     start: function teh_start() {
-      alert(this.browser);
       this.events.forEach((function(evt) {
-        this.browser.addEventListener(evt, this, true);
+        shell.home.addEventListener(evt, this, true);
       }).bind(this));
     },
     stop: function teh_stop() {
       this.events.forEach((function(evt) {
-        this.browser.removeEventListener(evt, this, true);
+        shell.home.removeEventListener(evt, this, true);
       }).bind(this));
     },
     handleEvent: function teh_handleEvent(evt) {
