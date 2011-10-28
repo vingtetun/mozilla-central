@@ -57,9 +57,12 @@
     }
   };
 
-  window.addEventListener('load', function touchStart() {
-    window.removeEventListener('load', touchStart);
-    TouchEventHandler.start();
-  });
+  window.addEventListener('load', function touchStart(evt) {
+    window.removeEventListener('load', touchStart, true);
+    shell.home.addEventListener('load', function contentStart(evt) {
+      shell.home.removeEventListener('load', contentStart);
+      TouchEventHandler.start();
+    }, true);
+  }, true);
 })();
 
