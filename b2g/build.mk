@@ -71,7 +71,7 @@ package:
 	@$(MAKE) -C b2g/installer
 
 install::
-	@echo "Mobile can't be installed directly."
+	@echo "B2G can't be installed directly."
 	@exit 1
 
 deb: package
