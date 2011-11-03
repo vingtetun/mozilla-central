@@ -109,7 +109,7 @@ ifeq ($(MOZ_WIDGET_TOOLKIT),android)
 CPPSRCS += nsSystemFontsAndroid.cpp
 endif
 
-ifeq ($(MOZ_WIDGET_TOOLKIT),b2g)
+ifeq ($(MOZ_WIDGET_TOOLKIT),gonk)
 CPPSRCS += nsSystemFontsAndroid.cpp
 endif
 

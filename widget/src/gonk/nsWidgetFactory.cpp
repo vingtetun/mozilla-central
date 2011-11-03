@@ -50,27 +50,27 @@
 //#include "nsTransferable.h"
 #include "nsLookAndFeel.h"
 #include "nsAppShellSingleton.h"
-#include "nsScreenManagerB2G.h"
+#include "nsScreenManagerGonk.h"
 //#include "nsFilePicker.h"
 //#include "nsClipboard.h"
 //#include "nsClipboardHelper.h"
-//#include "nsIdleServiceB2G.h"
+//#include "nsIdleServiceGonk.h"
 //#include "nsDragService.h"
 //#include "nsSound.h"
 //#include "nsBidiKeyboard.h"
-//#include "nsNativeThemeB2G.h"
+//#include "nsNativeThemeGonk.h"
 #include "nsFilePickerProxy.h"
 #include "nsXULAppAPI.h"
 
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsWindow)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsHTMLFormatConverter)
 //NS_GENERIC_FACTORY_CONSTRUCTOR(nsTransferable)
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsScreenManagerB2G)
+NS_GENERIC_FACTORY_CONSTRUCTOR(nsScreenManagerGonk)
 //NS_GENERIC_FACTORY_CONSTRUCTOR(nsClipboard)
 //NS_GENERIC_FACTORY_CONSTRUCTOR(nsClipboardHelper)
 //NS_GENERIC_FACTORY_CONSTRUCTOR(nsDragService)
 //NS_GENERIC_FACTORY_CONSTRUCTOR(nsBidiKeyboard)
-//NS_GENERIC_FACTORY_CONSTRUCTOR(nsIdleServiceB2G)
+//NS_GENERIC_FACTORY_CONSTRUCTOR(nsIdleServiceGonk)
 //NS_GENERIC_FACTORY_CONSTRUCTOR(nsSound)
 
 NS_DEFINE_NAMED_CID(NS_WINDOW_CID);
@@ -98,16 +98,16 @@ static const mozilla::Module::CIDEntry kWidgetCIDs[] = {
 //    { &kNS_DRAGSERVICE_CID, false, NULL, nsDragServiceConstructor },
     { &kNS_HTMLFORMATCONVERTER_CID, false, NULL, nsHTMLFormatConverterConstructor },
 //    { &kNS_BIDIKEYBOARD_CID, false, NULL, nsBidiKeyboardConstructor },
-    { &kNS_SCREENMANAGER_CID, false, NULL, nsScreenManagerB2GConstructor },
-//    { &kNS_IDLE_SERVICE_CID, false, NULL, nsIdleServiceB2GConstructor },
+    { &kNS_SCREENMANAGER_CID, false, NULL, nsScreenManagerGonkConstructor },
+//    { &kNS_IDLE_SERVICE_CID, false, NULL, nsIdleServiceGonkConstructor },
 //    { &kNS_POPUP_CID, false, NULL, nsPopupWindowConstructor },
     { NULL }
 };
 
 static const mozilla::Module::ContractIDEntry kWidgetContracts[] = {
-    { "@mozilla.org/widget/window/b2g;1", &kNS_WINDOW_CID },
-    { "@mozilla.org/widget/child_window/b2g;1", &kNS_CHILD_CID },
-    { "@mozilla.org/widget/appshell/b2g;1", &kNS_APPSHELL_CID },
+    { "@mozilla.org/widget/window/gonk;1", &kNS_WINDOW_CID },
+    { "@mozilla.org/widget/child_window/gonk;1", &kNS_CHILD_CID },
+    { "@mozilla.org/widget/appshell/gonk;1", &kNS_APPSHELL_CID },
 //    { "@mozilla.org/filepicker;1", &kNS_FILEPICKER_CID },
 //    { "@mozilla.org/widget/transferable;1", &kNS_TRANSFERABLE_CID },
 //    { "@mozilla.org/widget/clipboard;1", &kNS_CLIPBOARD_CID },
@@ -122,7 +122,7 @@ static const mozilla::Module::ContractIDEntry kWidgetContracts[] = {
 };
 
 static void
-nsWidgetB2GModuleDtor()
+nsWidgetGonkModuleDtor()
 {
     nsLookAndFeel::Shutdown();
  //   nsWindow::ReleaseGlobals();
@@ -136,7 +136,7 @@ static const mozilla::Module kWidgetModule = {
     NULL,
     NULL,
     nsAppShellInit,
-    nsWidgetB2GModuleDtor
+    nsWidgetGonkModuleDtor
 };
 
-NSMODULE_DEFN(nsWidgetB2GModule) = &kWidgetModule;
+NSMODULE_DEFN(nsWidgetGonkModule) = &kWidgetModule;

@@ -163,9 +163,9 @@ arm-android-eabi)
     ;;
 esac
 
-AC_ARG_WITH(b2g-gonk,
-[  --with-b2g-gonk=DIR
-                   a mysterious configure flag],
+AC_ARG_WITH(gonk,
+[  --with-gonk=DIR
+               location of gonk dir],
     b2g_gonk=$withval)
 
 if test -n "$b2g_gonk" ; then
@@ -209,8 +209,6 @@ if test -n "$b2g_gonk" ; then
 
     AC_DEFINE(ANDROID)
     CROSS_COMPILE=1
-    MOZ_CHROME_FILE_FORMAT=omni
-    ZLIB_DIR=yes
 else
 case "$target" in
 *-android*|*-linuxandroid*)

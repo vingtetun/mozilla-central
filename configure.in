@@ -289,35 +289,35 @@ arm-android-eabi)
     ;;
 esac
 
-MOZ_ARG_WITH_STRING(b2g-gonk,
-[  --with-b2g-gonk=DIR
-                   a mysterious configure flag],
-    b2g_gonk=$withval)
+MOZ_ARG_WITH_STRING(gonk,
+[  --with-gonk=DIR
+               location of gonk dir],
+    gonkdir=$withval)
 
-if test -n "$b2g_gonk" ; then
+if test -n "$gonkdir" ; then
     kernel_name=`uname -s | tr "[[:upper:]]" "[[:lower:]]"`
-    b2g_toolchain="$b2g_gonk"/prebuilt/$kernel_name-x86/toolchain/arm-eabi-4.4.3
+    gonk_toolchain="$gonkdir"/prebuilt/$kernel_name-x86/toolchain/arm-eabi-4.4.3
 
     dnl set up compilers
-    AS="$b2g_toolchain"/bin/arm-eabi-as
-    CC="$b2g_toolchain"/bin/arm-eabi-gcc
-    CXX="$b2g_toolchain"/bin/arm-eabi-g++
-    CPP="$b2g_toolchain"/bin/arm-eabi-cpp
-    LD="$b2g_toolchain"/bin/arm-eabi-ld
-    AR="$b2g_toolchain"/bin/arm-eabi-ar
-    RANLIB="$b2g_toolchain"/bin/arm-eabi-ranlib
-    STRIP="$b2g_toolchain"/bin/arm-eabi-strip
+    AS="$gonk_toolchain"/bin/arm-eabi-as
+    CC="$gonk_toolchain"/bin/arm-eabi-gcc
+    CXX="$gonk_toolchain"/bin/arm-eabi-g++
+    CPP="$gonk_toolchain"/bin/arm-eabi-cpp
+    LD="$gonk_toolchain"/bin/arm-eabi-ld
+    AR="$gonk_toolchain"/bin/arm-eabi-ar
+    RANLIB="$gonk_toolchain"/bin/arm-eabi-ranlib
+    STRIP="$gonk_toolchain"/bin/arm-eabi-strip
 
-    STLPORT_CPPFLAGS="-I$b2g_gonk/ndk/sources/cxx-stl/stlport/stlport/"
+    STLPORT_CPPFLAGS="-I$gonkdir/ndk/sources/cxx-stl/stlport/stlport/"
     STLPORT_LIBS="-lstlport"
 
-    CPPFLAGS="-DANDROID -I$b2g_gonk/bionic/libc/include/ -I$b2g_gonk/bionic/libc/kernel/common -I$b2g_gonk/bionic/libc/arch-arm/include -I$b2g_gonk/bionic/libc/kernel/arch-arm -I$b2g_gonk/bionic/libm/include -I$b2g_gonk/frameworks/base/opengl/include -I$b2g_gonk/frameworks/base/native/include -I$b2g_gonk/hardware/libhardware/include -I$b2g_gonk/system/core/include $STLPORT_CPPFLAGS $CPPFLAGS"
-    CFLAGS="-mandroid -I$b2g_gonk/bionic -I$b2g_gonk/frameworks/base/include -fno-short-enums -fno-exceptions $CFLAGS"
-    CXXFLAGS="-mandroid -I$b2g_gonk/bionic -I$b2g_gonk/frameworks/base/include -fno-short-enums -fno-exceptions $CXXFLAGS"
+    CPPFLAGS="-DANDROID -I$gonkdir/bionic/libc/include/ -I$gonkdir/bionic/libc/kernel/common -I$gonkdir/bionic/libc/arch-arm/include -I$gonkdir/bionic/libc/kernel/arch-arm -I$gonkdir/bionic/libm/include -I$gonkdir/frameworks/base/opengl/include -I$gonkdir/frameworks/base/native/include -I$gonkdir/hardware/libhardware/include -I$gonkdir/system/core/include $STLPORT_CPPFLAGS $CPPFLAGS"
+    CFLAGS="-mandroid -I$gonkdir/bionic -I$gonkdir/frameworks/base/include -fno-short-enums -fno-exceptions $CFLAGS"
+    CXXFLAGS="-mandroid -I$gonkdir/bionic -I$gonkdir/frameworks/base/include -fno-short-enums -fno-exceptions $CXXFLAGS"
     LIBS="$LIBS $STLPORT_LIBS"
 
     dnl Add -llog by default, since we use it all over the place.
-    LDFLAGS="-mandroid -L$b2g_gonk/out/target/product/galaxys2/obj/lib -Wl,-rpath-link=$b2g_gonk/out/target/product/galaxys2/obj/lib --sysroot=$b2g_gonk/out/target/product/galaxys2/obj/ -llog $LDFLAGS"
+    LDFLAGS="-mandroid -L$gonkdir/out/target/product/galaxys2/obj/lib -Wl,-rpath-link=$gonkdir/out/target/product/galaxys2/obj/lib --sysroot=$gonkdir/out/target/product/galaxys2/obj/ -llog $LDFLAGS"
 
     dnl prevent cross compile section from using these flags as host flags
     if test -z "$HOST_CPPFLAGS" ; then
@@ -334,12 +334,14 @@ if test -n "$b2g_gonk" ; then
     fi
 
     AC_DEFINE(ANDROID)
-    ANDROID_VERSION=8
-    AC_DEFINE_UNQUOTED(ANDROID_VERSION, 8)
-    AC_SUBST(ANDROID_VERSION)
     CROSS_COMPILE=1
     MOZ_CHROME_FILE_FORMAT=omni
     ZLIB_DIR=yes
+
+    dnl to trick the nss wrapper into doing the right thing
+    ANDROID_VERSION=8
+    AC_DEFINE_UNQUOTED(ANDROID_VERSION, 8)
+    AC_SUBST(ANDROID_VERSION)
 else
 case "$target" in
 *-android*|*-linuxandroid*)
@@ -2196,8 +2198,8 @@ ia64*-hpux*)
 *-android*|*-linuxandroid*)
     AC_DEFINE(NO_PW_GECOS)
     no_x=yes
-    if test -n "$b2g_toolchain"; then
-        _PLATFORM_DEFAULT_TOOLKIT=cairo-b2g
+    if test -n "$gonkdir"; then
+        _PLATFORM_DEFAULT_TOOLKIT=cairo-gonk
     else
         _PLATFORM_DEFAULT_TOOLKIT=cairo-android
     fi
@@ -4589,7 +4591,7 @@ MOZ_ARG_HEADER(Toolkit Options)
         -o "$_DEFAULT_TOOLKIT" = "cairo-cocoa" \
         -o "$_DEFAULT_TOOLKIT" = "cairo-uikit" \
         -o "$_DEFAULT_TOOLKIT" = "cairo-android" \
-        -o "$_DEFAULT_TOOLKIT" = "cairo-b2g"
+        -o "$_DEFAULT_TOOLKIT" = "cairo-gonk"
     then
         dnl nglayout only supports building with one toolkit,
         dnl so ignore everything after the first comma (",").
@@ -4711,9 +4713,9 @@ cairo-android)
     MOZ_PDF_PRINTING=1
     ;;
 
-cairo-b2g)
-    AC_DEFINE(MOZ_WIDGET_B2G)
-    MOZ_WIDGET_TOOLKIT=b2g
+cairo-gonk)
+    AC_DEFINE(MOZ_WIDGET_GONK)
+    MOZ_WIDGET_TOOLKIT=gonk
     TK_CFLAGS='$(MOZ_CAIRO_CFLAGS)'
     TK_LIBS='$(MOZ_CAIRO_LIBS)'
     MOZ_WEBGL=1

@@ -36,8 +36,8 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef nsScreenManagerB2G_h___
-#define nsScreenManagerB2G_h___
+#ifndef nsScreenManagerGonk_h___
+#define nsScreenManagerGonk_h___
 
 #include "nsCOMPtr.h"
 
@@ -45,21 +45,21 @@
 #include "nsIScreen.h"
 #include "WidgetUtils.h"
 
-class nsScreenB2G : public nsIScreen
+class nsScreenGonk : public nsIScreen
 {
 public:
-    nsScreenB2G(void *nativeScreen);
-    ~nsScreenB2G();
+    nsScreenGonk(void *nativeScreen);
+    ~nsScreenGonk();
 
     NS_DECL_ISUPPORTS
     NS_DECL_NSISCREEN
 };
 
-class nsScreenManagerB2G : public nsIScreenManager
+class nsScreenManagerGonk : public nsIScreenManager
 {
 public:
-    nsScreenManagerB2G();
-    ~nsScreenManagerB2G();
+    nsScreenManagerGonk();
+    ~nsScreenManagerGonk();
 
     NS_DECL_ISUPPORTS
     NS_DECL_NSISCREENMANAGER
@@ -68,4 +68,4 @@ protected:
     nsCOMPtr<nsIScreen> mOneScreen;
 };
 
-#endif /* nsScreenManagerB2G_h___ */
+#endif /* nsScreenManagerGonk_h___ */

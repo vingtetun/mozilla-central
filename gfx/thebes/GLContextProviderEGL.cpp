@@ -52,7 +52,7 @@
 #define GLdouble_defined 1
 // we're using default display for now
 #define GET_NATIVE_WINDOW(aWidget) (EGLNativeWindowType)static_cast<QWidget*>(aWidget->GetNativeData(NS_NATIVE_SHELLWIDGET))->winId()
-#elif defined(MOZ_WIDGET_B2G)
+#elif defined(MOZ_WIDGET_GONK)
 #define GET_NATIVE_WINDOW(aWidget) ((EGLNativeWindowType)aWidget->GetNativeData(NS_NATIVE_WINDOW))
 #endif
 
@@ -161,7 +161,7 @@ static bool gUseBackingSurface = true;
 static bool gUseBackingSurface = false;
 #endif
 
-#ifdef MOZ_WIDGET_B2G
+#ifdef MOZ_WIDGET_GONK
 extern nsIntRect gScreenBounds;
 #endif
 
@@ -216,8 +216,7 @@ CreateEGLSurfaceForXSurface(gfxASurface* aSurface, EGLConfig* aConfig = nsnull, 
 #endif
 
 #ifdef ANDROID
-#define printf_stderr(args...)  __android_log_print(ANDROID_LOG_INFO, "B2G EGL" , ## args)
-#define LOG(args...)  __android_log_print(ANDROID_LOG_INFO, "B2G EGL" , ## args)
+#define printf_stderr(args...)  __android_log_print(ANDROID_LOG_INFO, "Gonk EGL" , ## args)
 #endif
 static int
 next_power_of_two(int v)
@@ -313,7 +312,7 @@ public:
     pfnCreateImageKHR fCreateImageKHR;
     typedef EGLBoolean (GLAPIENTRY * pfnDestroyImageKHR)(EGLDisplay dpy, EGLImageKHR image);
     pfnDestroyImageKHR fDestroyImageKHR;
-#ifdef MOZ_WIDGET_B2G
+#ifdef MOZ_WIDGET_GONK
     typedef EGLBoolean (GLAPIENTRY * pfnSetSwapRectangleANDROID)(EGLDisplay dpy, EGLSurface surface, EGLint left, EGLint top, EGLint width, EGLint height);
     pfnSetSwapRectangleANDROID fSetSwapRectangleANDROID;
 #endif
@@ -413,7 +412,7 @@ public:
             SYMBOL(BindTexImage),
             SYMBOL(ReleaseTexImage),
             SYMBOL(QuerySurface),
-#ifdef MOZ_WIDGET_B2G
+#ifdef MOZ_WIDGET_GONK
             SYMBOL(SetSwapRectangleANDROID),
 #endif
             { NULL, { NULL } }
@@ -1907,7 +1906,7 @@ CreateSurfaceForWindow(nsIWidget *aWidget, EGLConfig config)
     surface = sEGLLibrary.fCreateWindowSurface(EGL_DISPLAY(), config, GET_NATIVE_WINDOW(aWidget), 0);
 #endif
 
-#ifdef MOZ_WIDGET_B2G
+#ifdef MOZ_WIDGET_GONK
     gScreenBounds.x = 0;
     gScreenBounds.y = 0;
     sEGLLibrary.fQuerySurface(EGL_DISPLAY(), surface, LOCAL_EGL_WIDTH, &gScreenBounds.width);

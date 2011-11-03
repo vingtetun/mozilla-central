@@ -277,7 +277,7 @@ static void Shutdown();
 #endif
 
 #include "nsGeolocation.h"
-#ifndef MOZ_WIDGET_B2G
+#ifndef MOZ_WIDGET_GONK
 #if defined(XP_UNIX)    || \
     defined(_WINDOWS)   || \
     defined(machintosh) || \
@@ -312,7 +312,7 @@ NS_GENERIC_FACTORY_SINGLETON_CONSTRUCTOR(nsDOMStorageManager,
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsChannelPolicy)
 NS_GENERIC_FACTORY_SINGLETON_CONSTRUCTOR(IndexedDatabaseManager,
                                          IndexedDatabaseManager::FactoryCreate)
-#ifndef MOZ_WIDGET_B2G
+#ifndef MOZ_WIDGET_GONK
 #if defined(XP_UNIX)    || \
     defined(_WINDOWS)   || \
     defined(machintosh) || \
@@ -843,7 +843,7 @@ NS_DEFINE_NAMED_CID(NS_SECURITYNAMESET_CID);
 NS_DEFINE_NAMED_CID(THIRDPARTYUTIL_CID);
 NS_DEFINE_NAMED_CID(NS_STRUCTUREDCLONECONTAINER_CID);
 
-#ifndef MOZ_WIDGET_B2G
+#ifndef MOZ_WIDGET_GONK
 #if defined(XP_UNIX)    || \
     defined(_WINDOWS)   || \
     defined(machintosh) || \
@@ -975,7 +975,7 @@ static const mozilla::Module::CIDEntry kLayoutCIDs[] = {
   { &kNS_SYSTEMPRINCIPAL_CID, false, NULL, nsSystemPrincipalConstructor },
   { &kNS_NULLPRINCIPAL_CID, false, NULL, nsNullPrincipalConstructor },
   { &kNS_SECURITYNAMESET_CID, false, NULL, nsSecurityNameSetConstructor },
-#ifndef MOZ_WIDGET_B2G
+#ifndef MOZ_WIDGET_GONK
 #if defined(XP_UNIX)    || \
     defined(_WINDOWS)   || \
     defined(machintosh) || \
@@ -1105,7 +1105,7 @@ static const mozilla::Module::ContractIDEntry kLayoutContracts[] = {
   { NS_SYSTEMPRINCIPAL_CONTRACTID, &kNS_SYSTEMPRINCIPAL_CID },
   { NS_NULLPRINCIPAL_CONTRACTID, &kNS_NULLPRINCIPAL_CID },
   { NS_SECURITYNAMESET_CONTRACTID, &kNS_SECURITYNAMESET_CID },
-#ifndef MOZ_WIDGET_B2G
+#ifndef MOZ_WIDGET_GONK
 #if defined(XP_UNIX)    || \
     defined(_WINDOWS)   || \
     defined(machintosh) || \

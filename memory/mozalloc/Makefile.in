@@ -53,7 +53,7 @@ MODULE		= mozalloc
 LIBRARY_NAME	= mozalloc
 DIST_INSTALL 	= 1
 
-ifeq (b2g,$(MOZ_WIDGET_TOOLKIT))
+ifeq (gonk,$(MOZ_WIDGET_TOOLKIT))
 FORCE_STATIC_LIB= 1
 else
 FORCE_SHARED_LIB= 1

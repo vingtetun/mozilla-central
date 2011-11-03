@@ -11,7 +11,7 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is B2G.
+ * The Original Code is Gonk.
  *
  * The Initial Developer of the Original Code is
  * the Mozilla Foundation.
@@ -49,7 +49,7 @@
 
 #include "android/log.h"
 
-#define LOG(args...)  __android_log_print(ANDROID_LOG_INFO, "B2G" , ## args)
+#define LOG(args...)  __android_log_print(ANDROID_LOG_INFO, "Gonk" , ## args)
 
 #define IS_TOPLEVEL() (mWindowType == eWindowType_toplevel || mWindowType == eWindowType_dialog)
 

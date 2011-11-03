@@ -51,7 +51,7 @@ CSRCS		= \
 		$(NULL)
 endif
 
-ifeq ($(MOZ_WIDGET_TOOLKIT),b2g)
+ifeq ($(MOZ_WIDGET_TOOLKIT),gonk)
 CSRCS		= \
 		sydney_audio_b2g.c \
 		$(NULL)

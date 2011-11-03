@@ -80,7 +80,7 @@ static nsSystemFontsQt *gSystemFonts = nsnull;
 #include "nsSystemFontsAndroid.h"
 #include "gfxPDFSurface.h"
 static nsSystemFontsAndroid *gSystemFonts = nsnull;
-#elif defined(MOZ_WIDGET_B2G)
+#elif defined(MOZ_WIDGET_GONK)
 #include "nsSystemFontsAndroid.h"
 static nsSystemFontsAndroid *gSystemFonts = nsnull;
 #else

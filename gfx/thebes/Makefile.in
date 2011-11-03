@@ -64,7 +64,7 @@ EXPORTS += \
 	$(NULL)
 endif
 
-ifeq ($(MOZ_WIDGET_TOOLKIT),b2g)
+ifeq ($(MOZ_WIDGET_TOOLKIT),gonk)
 EXPORTS += \
 	gfxAndroidPlatform.h \
 	gfxFT2Fonts.h \
@@ -250,7 +250,7 @@ CPPSRCS += \
 	$(NULL)
 endif
 
-ifeq ($(MOZ_WIDGET_TOOLKIT),b2g)
+ifeq ($(MOZ_WIDGET_TOOLKIT),gonk)
 EXPORTS	+= \
 	$(NULL)
 CPPSRCS += \
@@ -375,7 +375,7 @@ ifeq ($(MOZ_WIDGET_TOOLKIT),android)
 GL_PROVIDER = EGL
 endif
 
-ifeq ($(MOZ_WIDGET_TOOLKIT),b2g)
+ifeq ($(MOZ_WIDGET_TOOLKIT),gonk)
 GL_PROVIDER = EGL
 endif
 
@@ -405,7 +405,7 @@ ifeq ($(MOZ_WIDGET_TOOLKIT),android)
 CXXFLAGS += $(CAIRO_FT_CFLAGS)
 endif
 
-ifeq ($(MOZ_WIDGET_TOOLKIT),b2g)
+ifeq ($(MOZ_WIDGET_TOOLKIT),gonk)
 CXXFLAGS += $(CAIRO_FT_CFLAGS)
 endif
 

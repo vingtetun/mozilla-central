@@ -36,23 +36,23 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-#include "nsScreenManagerB2G.h"
+#include "nsScreenManagerGonk.h"
 
 using namespace mozilla;
 
-NS_IMPL_ISUPPORTS2(nsScreenB2G, nsIScreen, nsIScreen)
+NS_IMPL_ISUPPORTS2(nsScreenGonk, nsIScreen, nsIScreen)
 
-nsScreenB2G::nsScreenB2G(void *nativeScreen)
+nsScreenGonk::nsScreenGonk(void *nativeScreen)
 {
 }
 
-nsScreenB2G::~nsScreenB2G()
+nsScreenGonk::~nsScreenGonk()
 {
 }
 
 NS_IMETHODIMP
-nsScreenB2G::GetRect(PRInt32 *outLeft,  PRInt32 *outTop,
-                     PRInt32 *outWidth, PRInt32 *outHeight)
+nsScreenGonk::GetRect(PRInt32 *outLeft,  PRInt32 *outTop,
+                      PRInt32 *outWidth, PRInt32 *outHeight)
 {
     // XXX
     *outLeft = 0;
@@ -66,7 +66,7 @@ nsScreenB2G::GetRect(PRInt32 *outLeft,  PRInt32 *outTop,
 
 
 NS_IMETHODIMP
-nsScreenB2G::GetAvailRect(PRInt32 *outLeft,  PRInt32 *outTop,
+nsScreenGonk::GetAvailRect(PRInt32 *outLeft,  PRInt32 *outTop,
                           PRInt32 *outWidth, PRInt32 *outHeight)
 {
     return GetRect(outLeft, outTop, outWidth, outHeight);
@@ -75,7 +75,7 @@ nsScreenB2G::GetAvailRect(PRInt32 *outLeft,  PRInt32 *outTop,
 
 
 NS_IMETHODIMP
-nsScreenB2G::GetPixelDepth(PRInt32 *aPixelDepth)
+nsScreenGonk::GetPixelDepth(PRInt32 *aPixelDepth)
 {
     // XXX do we need to lie here about 16bpp?  Or
     // should we actually check and return the right thing?
@@ -85,47 +85,47 @@ nsScreenB2G::GetPixelDepth(PRInt32 *aPixelDepth)
 
 
 NS_IMETHODIMP
-nsScreenB2G::GetColorDepth(PRInt32 *aColorDepth)
+nsScreenGonk::GetColorDepth(PRInt32 *aColorDepth)
 {
     return GetPixelDepth(aColorDepth);
 }
 
-NS_IMPL_ISUPPORTS1(nsScreenManagerB2G, nsIScreenManager)
+NS_IMPL_ISUPPORTS1(nsScreenManagerGonk, nsIScreenManager)
 
-nsScreenManagerB2G::nsScreenManagerB2G()
+nsScreenManagerGonk::nsScreenManagerGonk()
 {
-    mOneScreen = new nsScreenB2G(nsnull);
+    mOneScreen = new nsScreenGonk(nsnull);
 }
 
-nsScreenManagerB2G::~nsScreenManagerB2G()
+nsScreenManagerGonk::~nsScreenManagerGonk()
 {
 }
 
 NS_IMETHODIMP
-nsScreenManagerB2G::GetPrimaryScreen(nsIScreen **outScreen)
+nsScreenManagerGonk::GetPrimaryScreen(nsIScreen **outScreen)
 {
     NS_IF_ADDREF(*outScreen = mOneScreen.get());
     return NS_OK;
 }
 
 NS_IMETHODIMP
-nsScreenManagerB2G::ScreenForRect(PRInt32 inLeft,
-                                  PRInt32 inTop,
-                                  PRInt32 inWidth,
-                                  PRInt32 inHeight,
-                                  nsIScreen **outScreen)
+nsScreenManagerGonk::ScreenForRect(PRInt32 inLeft,
+                                   PRInt32 inTop,
+                                   PRInt32 inWidth,
+                                   PRInt32 inHeight,
+                                   nsIScreen **outScreen)
 {
     return GetPrimaryScreen(outScreen);
 }
 
 NS_IMETHODIMP
-nsScreenManagerB2G::ScreenForNativeWidget(void *aWidget, nsIScreen **outScreen)
+nsScreenManagerGonk::ScreenForNativeWidget(void *aWidget, nsIScreen **outScreen)
 {
     return GetPrimaryScreen(outScreen);
 }
 
 NS_IMETHODIMP
-nsScreenManagerB2G::GetNumberOfScreens(PRUint32 *aNumberOfScreens)
+nsScreenManagerGonk::GetNumberOfScreens(PRUint32 *aNumberOfScreens)
 {
     *aNumberOfScreens = 1;
     return NS_OK;

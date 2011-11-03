@@ -43,10 +43,10 @@ VPATH           = @srcdir@
 include $(DEPTH)/config/autoconf.mk
 
 MODULE          = widget
-LIBRARY_NAME    = widget_b2g
+LIBRARY_NAME    = widget_gonk
 EXPORT_LIBRARY  = 1
 IS_COMPONENT    = 1
-MODULE_NAME     = nsWidgetB2GModule
+MODULE_NAME     = nsWidgetGonkModule
 GRE_MODULE      = 1
 LIBXUL_LIBRARY  = 1
 
@@ -56,7 +56,7 @@ CPPSRCS	= \
 	nsWidgetFactory.cpp \
 	nsWindow.cpp \
 	nsLookAndFeel.cpp \
-	nsScreenManagerB2G.cpp \
+	nsScreenManagerGonk.cpp \
 	$(NULL)
 
 SHARED_LIBRARY_LIBS = ../xpwidgets/libxpwidgets_s.a
