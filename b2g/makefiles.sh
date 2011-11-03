@@ -50,7 +50,6 @@ b2g/components/Makefile
 b2g/components/build/Makefile
 b2g/modules/Makefile
 b2g/installer/Makefile
-b2g/locales/Makefile
 b2g/Makefile
 b2g/themes/Makefile
 b2g/themes/core/Makefile"
