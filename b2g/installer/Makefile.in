@@ -122,19 +122,3 @@ else
 endif
 endif
 
-ifeq ($(OS_TARGET),Linux)
-GRE_MILESTONE = $(shell $(PYTHON) $(topsrcdir)/config/printconfigsetting.py $(LIBXUL_DIST)/bin/platform.ini Build Milestone)
-GRE_BUILDID = $(shell $(PYTHON) $(topsrcdir)/config/printconfigsetting.py $(LIBXUL_DIST)/bin/platform.ini Build BuildID)
-ABS_OBJDIR=`cd $(DEPTH); pwd`
-ABS_TOPSRCDIR=$(shell cd $(topsrcdir); pwd)
-
-DEFINES += \
-	-DGRE_MILESTONE=$(GRE_MILESTONE) \
-	-DGRE_BUILDID=$(GRE_BUILDID) \
-	-Dinstalldir=$(installdir) \
-	-DMOZ_APP_DISPLAYNAME="$(MOZ_APP_DISPLAYNAME)" \
-	-DMOZ_APP_VERSION=$(MOZ_APP_VERSION) \
-	-DABS_OBJDIR=$(ABS_OBJDIR) \
-	$(NULL)
-
-
