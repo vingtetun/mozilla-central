@@ -127,7 +127,6 @@ GRE_MILESTONE = $(shell $(PYTHON) $(topsrcdir)/config/printconfigsetting.py $(LI
 GRE_BUILDID = $(shell $(PYTHON) $(topsrcdir)/config/printconfigsetting.py $(LIBXUL_DIST)/bin/platform.ini Build BuildID)
 ABS_OBJDIR=`cd $(DEPTH); pwd`
 ABS_TOPSRCDIR=$(shell cd $(topsrcdir); pwd)
-BASE64_ICON = dist/branding/fennec_maemo_icon26.txt
 
 DEFINES += \
 	-DGRE_MILESTONE=$(GRE_MILESTONE) \
@@ -136,7 +135,6 @@ DEFINES += \
 	-DMOZ_APP_DISPLAYNAME="$(MOZ_APP_DISPLAYNAME)" \
 	-DMOZ_APP_VERSION=$(MOZ_APP_VERSION) \
 	-DABS_OBJDIR=$(ABS_OBJDIR) \
-	-DBASE64_ICON=$(BASE64_ICON) \
 	$(NULL)
 
 
