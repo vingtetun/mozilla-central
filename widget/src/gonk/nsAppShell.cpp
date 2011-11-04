@@ -142,7 +142,7 @@ sendMouseEvent(PRUint32 msg, struct timeval *time, int x, int y)
 
     event.refPoint.x = x;
     event.refPoint.y = y;
-    event.time = (time->tv_sec * 1000) + time->tv_usec;
+    event.time = time->tv_sec * 1000 + time->tv_usec / 1000;
     event.isShift = false;
     event.isControl = false;
     event.isMeta = false;
