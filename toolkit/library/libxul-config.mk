@@ -222,7 +222,7 @@ COMPONENT_LIBS += \
 	$(NULL)
 endif
 
-ifeq (,$(filter android qt os2 cocoa windows,$(MOZ_WIDGET_TOOLKIT)))
+ifeq (,$(filter android gonk qt os2 cocoa windows,$(MOZ_WIDGET_TOOLKIT)))
 ifdef MOZ_XUL
 COMPONENT_LIBS += fileview
 DEFINES += -DMOZ_FILEVIEW
@@ -264,6 +264,10 @@ endif
 
 ifeq ($(MOZ_WIDGET_TOOLKIT),android)
 COMPONENT_LIBS += widget_android
+endif
+
+ifeq ($(MOZ_WIDGET_TOOLKIT),gonk)
+COMPONENT_LIBS += widget_gonk
 endif
 
 STATIC_LIBS += thebes ycbcr
@@ -361,4 +365,8 @@ endif
 
 ifeq (android,$(MOZ_WIDGET_TOOLKIT))
 OS_LIBS += -lGLESv2
+endif
+
+ifeq (gonk,$(MOZ_WIDGET_TOOLKIT))
+OS_LIBS += -lui
 endif

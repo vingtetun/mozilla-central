@@ -289,6 +289,60 @@ arm-android-eabi)
     ;;
 esac
 
+MOZ_ARG_WITH_STRING(gonk,
+[  --with-gonk=DIR
+               location of gonk dir],
+    gonkdir=$withval)
+
+if test -n "$gonkdir" ; then
+    kernel_name=`uname -s | tr "[[:upper:]]" "[[:lower:]]"`
+    gonk_toolchain="$gonkdir"/prebuilt/$kernel_name-x86/toolchain/arm-eabi-4.4.3
+
+    dnl set up compilers
+    AS="$gonk_toolchain"/bin/arm-eabi-as
+    CC="$gonk_toolchain"/bin/arm-eabi-gcc
+    CXX="$gonk_toolchain"/bin/arm-eabi-g++
+    CPP="$gonk_toolchain"/bin/arm-eabi-cpp
+    LD="$gonk_toolchain"/bin/arm-eabi-ld
+    AR="$gonk_toolchain"/bin/arm-eabi-ar
+    RANLIB="$gonk_toolchain"/bin/arm-eabi-ranlib
+    STRIP="$gonk_toolchain"/bin/arm-eabi-strip
+
+    STLPORT_CPPFLAGS="-I$gonkdir/ndk/sources/cxx-stl/stlport/stlport/"
+    STLPORT_LIBS="-lstlport"
+
+    CPPFLAGS="-DANDROID -I$gonkdir/bionic/libc/include/ -I$gonkdir/bionic/libc/kernel/common -I$gonkdir/bionic/libc/arch-arm/include -I$gonkdir/bionic/libc/kernel/arch-arm -I$gonkdir/bionic/libm/include -I$gonkdir/frameworks/base/opengl/include -I$gonkdir/frameworks/base/native/include -I$gonkdir/hardware/libhardware/include -I$gonkdir/system/core/include $STLPORT_CPPFLAGS $CPPFLAGS"
+    CFLAGS="-mandroid -I$gonkdir/bionic -I$gonkdir/frameworks/base/include -fno-short-enums -fno-exceptions $CFLAGS"
+    CXXFLAGS="-mandroid -I$gonkdir/bionic -I$gonkdir/frameworks/base/include -fno-short-enums -fno-exceptions $CXXFLAGS"
+    LIBS="$LIBS $STLPORT_LIBS"
+
+    dnl Add -llog by default, since we use it all over the place.
+    LDFLAGS="-mandroid -L$gonkdir/out/target/product/galaxys2/obj/lib -Wl,-rpath-link=$gonkdir/out/target/product/galaxys2/obj/lib --sysroot=$gonkdir/out/target/product/galaxys2/obj/ -llog $LDFLAGS"
+
+    dnl prevent cross compile section from using these flags as host flags
+    if test -z "$HOST_CPPFLAGS" ; then
+        HOST_CPPFLAGS=" "
+    fi
+    if test -z "$HOST_CFLAGS" ; then
+        HOST_CFLAGS=" "
+    fi
+    if test -z "$HOST_CXXFLAGS" ; then
+        HOST_CXXFLAGS=" "
+    fi
+    if test -z "$HOST_LDFLAGS" ; then
+        HOST_LDFLAGS=" "
+    fi
+
+    AC_DEFINE(ANDROID)
+    CROSS_COMPILE=1
+    MOZ_CHROME_FILE_FORMAT=omni
+    ZLIB_DIR=yes
+
+    dnl to trick the nss wrapper into doing the right thing
+    ANDROID_VERSION=8
+    AC_DEFINE_UNQUOTED(ANDROID_VERSION, 8)
+    AC_SUBST(ANDROID_VERSION)
+else
 case "$target" in
 *-android*|*-linuxandroid*)
     if test -z "$android_ndk" ; then
@@ -448,6 +502,8 @@ case "$target" in
     AC_PATH_PROG(OBJCOPY,objcopy)
     ;;
 esac
+
+fi
 
 AC_SUBST(ANDROID_NDK)
 AC_SUBST(ANDROID_TOOLCHAIN)
@@ -2142,7 +2198,11 @@ ia64*-hpux*)
 *-android*|*-linuxandroid*)
     AC_DEFINE(NO_PW_GECOS)
     no_x=yes
-    _PLATFORM_DEFAULT_TOOLKIT=cairo-android
+    if test -n "$gonkdir"; then
+        _PLATFORM_DEFAULT_TOOLKIT=cairo-gonk
+    else
+        _PLATFORM_DEFAULT_TOOLKIT=cairo-android
+    fi
     TARGET_NSPR_MDCPUCFG='\"md/_linux.cfg\"'
 
     MOZ_GFX_OPTIMIZE_MOBILE=1
@@ -4352,7 +4412,7 @@ MOZ_URL_CLASSIFIER=
 MOZ_XTF=1
 MOZ_XUL=1
 MOZ_ZIPWRITER=1
-NS_PRINTING=1
+NS_PRINTING=
 MOZ_PDF_PRINTING=
 MOZ_DISABLE_DOMCRYPTO=
 NSS_DISABLE_DBM=
@@ -4530,7 +4590,8 @@ MOZ_ARG_HEADER(Toolkit Options)
         -o "$_DEFAULT_TOOLKIT" = "cairo-os2" \
         -o "$_DEFAULT_TOOLKIT" = "cairo-cocoa" \
         -o "$_DEFAULT_TOOLKIT" = "cairo-uikit" \
-        -o "$_DEFAULT_TOOLKIT" = "cairo-android"
+        -o "$_DEFAULT_TOOLKIT" = "cairo-android" \
+        -o "$_DEFAULT_TOOLKIT" = "cairo-gonk"
     then
         dnl nglayout only supports building with one toolkit,
         dnl so ignore everything after the first comma (",").
@@ -4650,6 +4711,14 @@ cairo-android)
     TK_LIBS='$(MOZ_CAIRO_LIBS)'
     MOZ_WEBGL=1
     MOZ_PDF_PRINTING=1
+    ;;
+
+cairo-gonk)
+    AC_DEFINE(MOZ_WIDGET_GONK)
+    MOZ_WIDGET_TOOLKIT=gonk
+    TK_CFLAGS='$(MOZ_CAIRO_CFLAGS)'
+    TK_LIBS='$(MOZ_CAIRO_LIBS)'
+    MOZ_WEBGL=1
     ;;
 
 esac
@@ -5268,7 +5337,7 @@ dnl ========================================================
 MOZ_ARG_DISABLE_BOOL(printing,
 [  --disable-printing      Disable printing support],
     NS_PRINTING=,
-    NS_PRINTING=1)
+    NS_PRINTING=)
 
 if test "$NS_PRINTING"; then
     AC_DEFINE(NS_PRINTING)
@@ -7141,7 +7210,9 @@ dnl We need to wrap dlopen and related functions on Android because we use
 dnl our own linker.
 if test "$OS_TARGET" = Android; then
     WRAP_LDFLAGS="${WRAP_LDFLAGS} -L$_objdir/dist/lib -lmozutils"
-    WRAP_LDFLAGS="${WRAP_LDFLAGS} -Wl,--wrap=dlopen,--wrap=dlclose,--wrap=dlerror,--wrap=dlsym,--wrap=dladdr"
+    if test "$MOZ_WIDGET_TOOLKIT" = android; then
+        WRAP_LDFLAGS="${WRAP_LDFLAGS} -Wl,--wrap=dlopen,--wrap=dlclose,--wrap=dlerror,--wrap=dlsym,--wrap=dladdr"
+    fi
 fi
 
 dnl ========================================================
@@ -8805,8 +8876,6 @@ if test "$CAIRO_FEATURES_H"; then
   fi
 fi
 
-# Run freetype configure script
-
 if test "$MOZ_TREE_FREETYPE"; then
    export CFLAGS="$CFLAGS -std=c99"
    export CPPFLAGS="$CPPFLAGS"
@@ -8844,6 +8913,8 @@ if test -n "$_WRAP_MALLOC"; then
     # Avoid doubling wrap malloc arguments
     _SUBDIR_CONFIG_ARGS="`echo $_SUBDIR_CONFIG_ARGS | sed -e 's/--enable-wrap-malloc *//'`"
 fi
+
+# Run freetype configure script
 
 if test -z "$MOZ_NATIVE_NSPR"; then
     ac_configure_args="$_SUBDIR_CONFIG_ARGS --with-dist-prefix=$MOZ_BUILD_ROOT/dist --with-mozilla"
