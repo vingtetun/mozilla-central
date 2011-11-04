@@ -74,9 +74,6 @@ install::
 	@echo "B2G can't be installed directly."
 	@exit 1
 
-deb: package
-	@$(MAKE) -C b2g/installer deb
-
 upload::
 	@$(MAKE) -C b2g/installer upload
 
@@ -92,6 +89,3 @@ mochitest:: mochitest-browser-chrome
 .PHONY: mochitest-browser-chrome
 endif
 
-ifeq ($(OS_TARGET),Linux)
-deb: installer
-endif
