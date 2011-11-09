@@ -36,15 +36,12 @@
 
 const Cc = Components.classes;
 const Ci = Components.interfaces;
+const Cu = Components.utils;
 const CC = Components.Constructor;
 
-// The default homescreen url to use if there is no B2G_HOMESCREEN
-// environment variable or if it is empty.
-const kDefaultHomeScreen = "/data/local/homescreen.html";
-const kDefaultSystemHomeScreen = "/system/home/homescreen.html";
+Cu.import("resource://gre/modules/Services.jsm");
 
-var LocalFile = CC("@mozilla.org/file/local;1", "nsILocalFile", "initWithPath");
-
+const LocalFile = CC("@mozilla.org/file/local;1", "nsILocalFile", "initWithPath");
 var shell = {
   get home() {
     delete this.home;
@@ -52,17 +49,16 @@ var shell = {
   },
 
   get homeSrc() {
-    let homeSrc = Cc["@mozilla.org/process/environment;1"]
-                    .getService(Ci.nsIEnvironment)
-                    .get("B2G_HOMESCREEN");
-    if (homeSrc)
-      return homeSrc;
+    try {
+      let homeSrc = Cc["@mozilla.org/process/environment;1"]
+                      .getService(Ci.nsIEnvironment)
+                      .get("B2G_HOMESCREEN");
+      let file = new LocalFile(homeSrc);
+      if (file.exists())
+        return "file://" + homeSrc;
+    } catch (e) {}
 
-    let file = new LocalFile(kDefaultHomeScreen);
-    if (file.exists())
-      return "file://" + kDefaultHomeScreen;
-
-    return "file://" + kDefaultSystemHomeScreen;
+    return 'file://' + Services.prefs.getCharPref("browser.homescreenURL");
   },
 
   start: function shell_init() {
