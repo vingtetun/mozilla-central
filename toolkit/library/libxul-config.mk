@@ -274,7 +274,7 @@ endif
 
 STATIC_LIBS += thebes ycbcr
 
-ifeq ($(MOZ_WIDGET_TOOLKIT),android)
+ifeq ($(OS_TARGET),Android)
 STATIC_LIBS += profiler
 endif
 
