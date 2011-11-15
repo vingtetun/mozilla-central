@@ -53,12 +53,11 @@ var shell = {
       let homeSrc = Cc["@mozilla.org/process/environment;1"]
                       .getService(Ci.nsIEnvironment)
                       .get("B2G_HOMESCREEN");
-      let file = new LocalFile(homeSrc);
-      if (file.exists())
-        return "file://" + homeSrc;
+      if (homeSrc)
+        return homeSrc;
     } catch (e) {}
 
-    return 'file://' + Services.prefs.getCharPref("browser.homescreenURL");
+    return Services.prefs.getCharPref("browser.homescreenURL");
   },
 
   start: function shell_init() {

@@ -41,9 +41,9 @@ pref("toolkit.defaultChromeURI", "chrome://browser/content/shell.xul");
 pref("general.useragent.compatMode.firefox", true);
 pref("browser.chromeURL", "chrome://browser/content/");
 #ifdef MOZ_OFFICIAL_BRANDING
-pref("browser.homescreenURL", "/system/home/homescreen.html");
+pref("browser.homescreenURL", "file:///system/home/homescreen.html");
 #else
-pref("browser.homescreenURL", "/data/local/homescreen.html");
+pref("browser.homescreenURL", "file:///data/local/homescreen.html");
 #endif
 
 // Device pixel to CSS px ratio, in percent. Set to -1 to calculate based on display density.
