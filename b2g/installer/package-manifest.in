@@ -436,8 +436,7 @@
 
 ; [Default Preferences]
 ; All the pref files must be part of base to prevent migration bugs
-@BINPATH@/@PREF_DIR@/mobile.js
-@BINPATH@/@PREF_DIR@/mobile-branding.js
+@BINPATH@/@PREF_DIR@/b2g.js
 @BINPATH@/@PREF_DIR@/channel-prefs.js
 #ifdef MOZ_SERVICES_SYNC
 @BINPATH@/@PREF_DIR@/services-sync.js
@@ -563,7 +562,7 @@ bin/components/@DLL_PREFIX@nkgnomevfs@DLL_SUFFIX@
 @BINPATH@/MozSounds.cmd
 #endif
 
-[mobile]
+[b2g]
 @BINPATH@/chrome/icons/
 @BINPATH@/chrome/chrome@JAREXT@
 @BINPATH@/chrome/chrome.manifest

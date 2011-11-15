@@ -51,7 +51,7 @@ MOZ_PKG_MANIFEST_P = $(srcdir)/package-manifest.in
 MOZ_NONLOCALIZED_PKG_LIST = \
 	xpcom \
 	browser \
-	mobile \
+	b2g \
 	$(NULL)
 
 DEFINES += \
