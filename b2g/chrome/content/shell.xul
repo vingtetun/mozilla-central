@@ -61,3 +61,4 @@
 
   <browser id="homescreen" type="content-primary" flex="1" style="overflow: hidden;"/>
 </window>
+

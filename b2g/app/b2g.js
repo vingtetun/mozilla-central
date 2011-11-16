@@ -43,7 +43,7 @@ pref("browser.chromeURL", "chrome://browser/content/");
 #ifdef MOZ_OFFICIAL_BRANDING
 pref("browser.homescreenURL", "file:///system/home/homescreen.html");
 #else
-pref("browser.homescreenURL", "file:///data/local/homescreen.html");
+pref("browser.homescreenURL", "file:///data/local/homescreen.html,file:///system/home/homescreen.html");
 #endif
 
 // Device pixel to CSS px ratio, in percent. Set to -1 to calculate based on display density.

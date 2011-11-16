@@ -39,31 +39,44 @@ const Ci = Components.interfaces;
 const Cu = Components.utils;
 const CC = Components.Constructor;
 
-Cu.import("resource://gre/modules/Services.jsm");
+Cu.import('resource://gre/modules/Services.jsm');
 
-const LocalFile = CC("@mozilla.org/file/local;1", "nsILocalFile", "initWithPath");
+const LocalFile = CC('@mozilla.org/file/local;1',
+                     'nsILocalFile',
+                     'initWithPath');
 var shell = {
   get home() {
     delete this.home;
-    return this.home = document.getElementById("homescreen");
+    return this.home = document.getElementById('homescreen');
   },
 
   get homeSrc() {
     try {
-      let homeSrc = Cc["@mozilla.org/process/environment;1"]
+      let homeSrc = Cc['@mozilla.org/process/environment;1']
                       .getService(Ci.nsIEnvironment)
-                      .get("B2G_HOMESCREEN");
+                      .get('B2G_HOMESCREEN');
       if (homeSrc)
         return homeSrc;
     } catch (e) {}
 
-    return Services.prefs.getCharPref("browser.homescreenURL");
+    let urls = Services.prefs.getCharPref('browser.homescreenURL').split(',');
+    for (let i = 0; i < urls.length; i++) {
+      let url = urls[i];
+      if (url.substring(0, 7) != 'file://')
+        return url;
+
+      let file = new LocalFile(url.substring(7, url.length));
+      if (file.exists())
+        return url;
+    }
+    return null;
   },
 
   start: function shell_init() {
     window.controllers.appendController(this);
+    window.addEventListener('keypress', this, true);
 
-    let ioService = Cc["@mozilla.org/network/io-service;1"]
+    let ioService = Cc['@mozilla.org/network/io-service;1']
                       .getService(Ci.nsIIOService2);
     ioService.offline = false;
 
@@ -73,18 +86,20 @@ var shell = {
   },
 
   stop: function shell_stop() {
+    window.controllers.removeController(this);
+    window.removeEventListener('keypress', this, true);
   },
 
   supportsCommand: function shell_supportsCommand(cmd) {
     let isSupported = false;
     switch (cmd) {
-      case "cmd_close":
+      case 'cmd_close':
         isSupported = true;
         break;
       default:
         isSupported = false;
         break;
-    }    
+    }
     return isSupported;
   },
 
@@ -94,20 +109,23 @@ var shell = {
 
   doCommand: function shell_doCommand(cmd) {
     switch (cmd) {
-      case "cmd_close":
+      case 'cmd_close':
         let win = this.home.contentWindow;
-        let evt = win.document.createEvent("UIEvents");
-        evt.initUIEvent("appclose", true, true, win, 1);
+        let evt = win.document.createEvent('UIEvents');
+        evt.initUIEvent('appclose', true, true, win, 1);
         win.document.dispatchEvent(evt);
         break;
-    }    
+    }
   },
 
-  _keyPressListener: function shell_keyPressListener(e) {
-    if (e.keyCode == e.DOM_VK_HOME) {
-      shell.doCommand("cmd_close");
+  handleEvent: function shell_handleEvent(evt) {
+    switch (evt.type) {
+      case 'keypress':
+        if (evt.keyCode == evt.DOM_VK_HOME) {
+          this.doCommand('cmd_close');
+        }
+        break;
     }
   }
 };
 
-window.addEventListener("keypress", shell._keyPressListener, true);
