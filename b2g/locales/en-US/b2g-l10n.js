@@ -11,15 +11,14 @@
 # for the specific language governing rights and limitations under the
 # License.
 #
-# The Original Code is Mozilla.
+# The Original Code is the Firefox browser.
 #
 # The Initial Developer of the Original Code is
-# the Mozilla Foundation <http://www.mozilla.org/>.
-# Portions created by the Initial Developer are Copyright (C) 2007
+# Benjamin Smedberg <bsmedberg@covad.net>
+# Portions created by the Initial Developer are Copyright (C) 2004
 # the Initial Developer. All Rights Reserved.
 #
 # Contributor(s):
-#   Mark Finkle <mfinkle@mozilla.com>
 #
 # Alternatively, the contents of this file may be used under the terms of
 # either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -35,32 +34,6 @@
 #
 # ***** END LICENSE BLOCK *****
 
-MOZ_APP_NAME=b2g
-MOZ_APP_UA_NAME=B2G
+#filter substitution
 
-MOZ_APP_VERSION=10.0a1
-
-MOZ_BRANDING_DIRECTORY=b2g/branding/unofficial
-MOZ_OFFICIAL_BRANDING_DIRECTORY=b2g/branding/official
-# MOZ_APP_DISPLAYNAME is set by branding/configure.sh
-
-MOZ_SAFE_BROWSING=
-MOZ_SERVICES_SYNC=
-
-MOZ_DISABLE_DOMCRYPTO=1
-
-if test "$OS_TARGET" = "Android"; then
-MOZ_CAPTURE=1
-MOZ_RAW=1
-fi
-
-# use custom widget for html:select
-MOZ_USE_NATIVE_POPUP_WINDOWS=1
-
-if test "$LIBXUL_SDK"; then
-MOZ_XULRUNNER=1
-else
-MOZ_XULRUNNER=
-MOZ_PLACES=1
-fi
-
+pref("general.useragent.locale", "@AB_CD@");

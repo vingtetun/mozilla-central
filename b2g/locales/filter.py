@@ -14,12 +14,12 @@
 # The Original Code is Mozilla.
 #
 # The Initial Developer of the Original Code is
-# the Mozilla Foundation <http://www.mozilla.org/>.
-# Portions created by the Initial Developer are Copyright (C) 2007
+# Mozilla Foundation.
+# Portions created by the Initial Developer are Copyright (C) 2009
 # the Initial Developer. All Rights Reserved.
 #
 # Contributor(s):
-#   Mark Finkle <mfinkle@mozilla.com>
+#   Axel Hecht <l10n@mozilla.com>
 #
 # Alternatively, the contents of this file may be used under the terms of
 # either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -35,32 +35,35 @@
 #
 # ***** END LICENSE BLOCK *****
 
-MOZ_APP_NAME=b2g
-MOZ_APP_UA_NAME=B2G
 
-MOZ_APP_VERSION=10.0a1
+def test(mod, path, entity = None):
+  import re
+  # ignore anything but b2g, which is our local repo checkout name
+  if mod not in ("netwerk", "dom", "toolkit", "security/manager",
+                 "services/sync", "embedding/android",
+                 "mobile"):
+    return False
 
-MOZ_BRANDING_DIRECTORY=b2g/branding/unofficial
-MOZ_OFFICIAL_BRANDING_DIRECTORY=b2g/branding/official
-# MOZ_APP_DISPLAYNAME is set by branding/configure.sh
+  # Ignore Lorentz strings, at least temporarily
+  if mod == "toolkit" and path == "chrome/mozapps/plugins/plugins.dtd":
+    if entity.startswith('reloadPlugin.'): return False
+    if entity.startswith('report.'): return False
 
-MOZ_SAFE_BROWSING=
-MOZ_SERVICES_SYNC=
+  if mod != "mobile":
+    # we only have exceptions for mobile
+    return True
+  if not entity:
+    return not (re.match(r"searchplugins\/.+\.xml", path) or
+                re.match(r"b2g-l10n.js", path) or
+                re.match(r"defines.inc", path))
+  if path == "defines.inc":
+    return entity != "MOZ_LANGPACK_CONTRIBUTORS"
 
-MOZ_DISABLE_DOMCRYPTO=1
-
-if test "$OS_TARGET" = "Android"; then
-MOZ_CAPTURE=1
-MOZ_RAW=1
-fi
-
-# use custom widget for html:select
-MOZ_USE_NATIVE_POPUP_WINDOWS=1
-
-if test "$LIBXUL_SDK"; then
-MOZ_XULRUNNER=1
-else
-MOZ_XULRUNNER=
-MOZ_PLACES=1
-fi
-
+  if path != "chrome/region.properties":
+    # only region.properties exceptions remain, compare all others
+    return True
+  
+  return not (re.match(r"browser\.search\.order\.[1-9]", entity) or
+              re.match(r"browser\.contentHandlers\.types\.[0-5]", entity) or
+              re.match(r"gecko\.handlerService\.schemes\.", entity) or
+              re.match(r"gecko\.handlerService\.defaultHandlersVersion", entity))

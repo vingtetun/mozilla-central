@@ -119,11 +119,11 @@ var shell = {
   },
 
   handleEvent: function shell_handleEvent(evt) {
-    switch (evt.type) {
-      case 'keypress':
-        if (evt.keyCode == evt.DOM_VK_HOME) {
-          this.doCommand('cmd_close');
-        }
+    switch (evt.keyCode) {
+      case evt.DOM_VK_HOME:
+        break;
+      case evt.DOM_VK_ESCAPE:
+        this.doCommand('cmd_close');
         break;
     }
   }
