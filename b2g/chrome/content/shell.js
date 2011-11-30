@@ -208,9 +208,13 @@ function MozKeyboard() {
 };
 
 MozKeyboard.prototype = {
-  sendKey: function mozKeyboardSendKey(content, keyCode) {
-    let utils = window.QueryInterface(Ci.nsIInterfaceRequestor)
-                      .getInterface(Ci.nsIDOMWindowUtils);
+  get utils() {
+    delete this.utils;
+    return this.utils = window.QueryInterface(Ci.nsIInterfaceRequestor)
+                              .getInterface(Ci.nsIDOMWindowUtils);
+  },
+  sendKey: function mozKeyboardSendKey(keyCode) {
+    var utils = this.utils;
     ["keydown", "keypress", "keyup"].forEach(function sendKeyEvents(type) {
       utils.sendKeyEvent(type, keyCode, keyCode, null);
     });
