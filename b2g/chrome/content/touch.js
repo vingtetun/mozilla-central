@@ -3,7 +3,7 @@
   let debugging = false;
   function debug(str) {
     if (debugging)
-      dump(str);
+      dump(str + '\n');
   };
   let gIgnoreEvents = false;
 
@@ -104,25 +104,29 @@
 
         case 'click':
           if (!isNewTouchAction) {
-            debug('click: cancel\n');
+            debug('click: cancel');
+
             evt.preventDefault();
             evt.stopPropagation();
           } else {
             // Mouse events has been cancelled so dispatch a sequence
             // of events to where touchend has been fired
             if (preventMouseEvents) {
-            let target = evt.target;
-            try{
+              let target = evt.target;
               gIgnoreEvents = true;
-              this.fireMouseEvent('mousemove', target, evt.pageX, evt.pageY);
-              this.fireMouseEvent('mousedown', target, evt.pageX, evt.pageY);
-              this.fireMouseEvent('mouseup', target, evt.pageX, evt.pageY);
+              try {
+                this.fireMouseEvent('mousemove', evt);
+                this.fireMouseEvent('mousedown', evt);
+                this.fireMouseEvent('mouseup', evt);
+              } catch (e) {
+                alert(e);
+              }
+              evt.preventDefault();
+              evt.stopPropagation();
               gIgnoreEvents = false;
-            } catch(e) {
-              alert(e);
             }
-            }
-            debug('click: fire\n');
+
+            debug('click: fire');
           }
           return;
       }
@@ -139,17 +143,22 @@
         evt.stopPropagation();
 
         if (type != 'touchmove')
-          debug('cancelled (fire ' + type + ')\n');
+          debug('cancelled (fire ' + type + ')');
       }
     },
-    fireMouseEvent: function teh_fireMouseEvent(type, target, x, y) {
-      debug(type + ': fire\n');
-      let doc = target.ownerDocument;
+    fireMouseEvent: function teh_fireMouseEvent(type, e)  {
+      debug(type + ': fire');
+
+      let doc = e.target.ownerDocument;
       let evt = doc.createEvent('MouseEvent');
       evt.initMouseEvent(type, true, true, doc.defaultView,
-                         0, x, y, x, y, false, false, false, false,
-                         0, null);
-      target.dispatchEvent(evt);
+                         e.detail, e.screenX, e.screenY, e.clientX, e.clientY,
+                         false, false, false, false,
+                         0, e.relatedTarget);
+      var windowUtils = doc.defaultView
+                           .QueryInterface(Ci.nsIInterfaceRequestor)
+                           .getInterface(Ci.nsIDOMWindowUtils);
+      windowUtils.sendMouseEvent(type, e.pageX, e.pageY, 0, 1, 0, true);
     },
     sendContextMenu: function teh_sendContextMenu(target, x, y, delay) {
       let doc = target.ownerDocument;
@@ -190,12 +199,9 @@
     }
   };
 
-  window.addEventListener('load', function touchStart(evt) {
-    window.removeEventListener('load', touchStart, true);
-    shell.home.addEventListener('load', function contentStart(evt) {
-      shell.home.removeEventListener('load', contentStart);
-      TouchEventHandler.start();
-    }, true);
-  }, true);
+  window.addEventListener('ContentStart', function touchStart(evt) {
+    window.removeEventListener('ContentStart', touchStart);
+    TouchEventHandler.start();
+  });
 })();
 
