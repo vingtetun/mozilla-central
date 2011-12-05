@@ -97,6 +97,9 @@
           break;
 
         case 'unload':
+          if (!eventTarget)
+            return;
+
           window.clearTimeout(contextMenuTimeout);
           eventTarget.ownerDocument.releaseCapture();
           this.target = null;

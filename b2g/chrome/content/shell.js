@@ -126,7 +126,6 @@ var shell = {
           case evt.DOM_VK_ESCAPE:
             if (evt.getPreventDefault())
               return;
-    
             this.doCommand('cmd_close');
             break;
         }
@@ -137,7 +136,6 @@ var shell = {
         break;
     }
   },
-  
   sendEvent: function shell_sendEvent(content, type, details) {
     let event = content.document.createEvent('CustomEvent');
     event.initCustomEvent(type, true, true, details ? details : {});
@@ -145,7 +143,7 @@ var shell = {
   }
 };
 
-(function VirtualKeyboardManager() { 
+(function VirtualKeyboardManager() {
   let activeElement = null;
   let isKeyboardOpened = false;
 
@@ -167,7 +165,7 @@ var shell = {
           evt.preventDefault();
           evt.stopPropagation();
           break;
-        case 'mousedown': 
+        case 'mousedown':
           if (evt.target != activeElement || isKeyboardOpened)
             return;
 
@@ -182,7 +180,7 @@ var shell = {
 
       let shouldOpen = parseInt(data);
       if (shouldOpen && !isKeyboardOpened) {
-        activeElement = Cc["@mozilla.org/focus-manager;1"]
+        activeElement = Cc['@mozilla.org/focus-manager;1']
                           .getService(Ci.nsIFocusManager)
                           .focusedElement;
         if (!activeElement)
@@ -205,17 +203,13 @@ var shell = {
 
 
 function MozKeyboard() {
-};
+}
 
 MozKeyboard.prototype = {
-  get utils() {
-    delete this.utils;
-    return this.utils = window.QueryInterface(Ci.nsIInterfaceRequestor)
-                              .getInterface(Ci.nsIDOMWindowUtils);
-  },
   sendKey: function mozKeyboardSendKey(keyCode) {
-    var utils = this.utils;
-    ["keydown", "keypress", "keyup"].forEach(function sendKeyEvents(type) {
+    var utils = window.QueryInterface(Ci.nsIInterfaceRequestor)
+                      .getInterface(Ci.nsIDOMWindowUtils);
+    ['keydown', 'keypress', 'keyup'].forEach(function sendKeyEvents(type) {
       utils.sendKeyEvent(type, keyCode, keyCode, null);
     });
   }
