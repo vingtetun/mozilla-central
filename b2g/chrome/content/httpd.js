@@ -507,7 +507,7 @@ nsHttpServer.prototype =
   //
   start: function(port)
   {
-    this._start(port, "localhost")
+    this._start(port, "gaia.org")
   },
 
   _start: function(port, host)
@@ -531,7 +531,7 @@ nsHttpServer.prototype =
     try
     {
       var loopback = true;
-      if (this._host != "127.0.0.1" && this._host != "localhost") {
+      if (this._host != "127.0.0.1" && this._host != "gaia.org") {
         var loopback = false;
       }
 
@@ -870,7 +870,7 @@ function ServerIdentity()
    * Note the "x" prefix on hostnames, which prevents collisions with special
    * JS names like "prototype".
    */
-  this._locations = { "xlocalhost": {} };
+  this._locations = { "xgaia.org": {} };
 }
 ServerIdentity.prototype =
 {
@@ -1014,7 +1014,7 @@ ServerIdentity.prototype =
     if (this._primaryPort !== -1)
       this.add("http", host, port);
     else
-      this.setPrimary("http", "localhost", port);
+      this.setPrimary("http", "gaia.org", port);
     this._defaultPort = port;
 
     // Only add this if we're being called at server startup
@@ -1103,6 +1103,8 @@ ServerIdentity.prototype =
  */
 function Connection(input, output, server, port, outgoingPort, number)
 {
+
+
   dumpn("*** opening new connection " + number + " on port " + outgoingPort);
 
   /** Stream of incoming data. */
@@ -1418,6 +1420,19 @@ RequestReader.prototype =
                             ? parseInt(request.getHeader("Content-Length"), 10)
                             : 0;
         dumpn("_processHeaders, Content-length=" + this._contentLength);
+
+
+        // XXX Serve different contents based on the subdomain name
+        try {
+          var hostPort = request._headers.getHeader("Host");
+          var colon = hostPort.indexOf(":");
+          var host = (colon < 0) ? hostPort : hostPort.substring(0, colon);
+
+          if (host != 'gaia.org' && host.indexOf('.') != -1) {
+            var oldPath = request._path;
+            request._path = '/apps/' + host.split('.')[0] + oldPath;
+          }
+        } catch (e) {}
 
         this._state = READER_IN_BODY;
       }
@@ -2690,6 +2705,7 @@ ServerHandler.prototype =
       response.setHeader("Content-Type", type, false);
       maybeAddHeaders(file, metadata, response);
       response.setHeader("Content-Length", "" + count, false);
+      response.setHeader("Access-Control-Allow-Origin", "*",false);
 
       var fis = new FileInputStream(file, PR_RDONLY, 0444,
                                     Ci.nsIFileInputStream.CLOSE_ON_EOF);
@@ -5196,7 +5212,7 @@ function server(port, basePath)
   if (lp)
     srv.registerDirectory("/", lp);
   srv.registerContentType("sjs", SJS_TYPE);
-  srv.identity.setPrimary("http", "localhost", port);
+  srv.identity.setPrimary("http", "gaia.org", port);
   srv.start(port);
 
   var thread = gThreadManager.currentThread;

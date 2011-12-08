@@ -78,9 +78,12 @@ function startupHttpd(baseDir, port) {
 
 // XXX until we have a security model, just let the pre-installed
 // app used indexedDB.
-function allowIndexedDB(url) {
-  let uri = Services.io.newURI(url, null, null);
-  Services.perms.add(uri, 'indexedDB', Ci.nsIPermissionManager.ALLOW_ACTION);
+function allowIndexedDB(urls) {
+  urls.forEach(function(url) {
+    let uri = Services.io.newURI(url, null, null);
+    let allow = Ci.nsIPermissionManager.ALLOW_ACTION;
+    Services.perms.add(uri, 'indexedDB', allow);
+  });
 }
 
 
@@ -123,7 +126,9 @@ var shell = {
 
 
     let browser = this.home;
-    function loadHome() {
+    function loadHome(urls) {
+      allowIndexedDB(urls);
+
       browser.homePage = homeURL;
       browser.goHome();
     }
@@ -133,7 +138,7 @@ var shell = {
 
       let fileScheme = 'file://';
       if (homeURL.substring(0, fileScheme.length) != fileScheme) {
-        loadHome();
+        loadHome([homeURL]);
         return;
       }
 
@@ -147,18 +152,20 @@ var shell = {
       let server = startupHttpd(baseDir, port);
 
       let scheme = 'http';
-      let host = 'localhost';
+      let host = 'gaia.org';
       homeURL = homeURL.replace(baseDir, scheme + '://' + host + ':' + port);
 
+      let urls = [];
       let identity = server.identity;
       window.navigator.mozApps.enumerate(function enumerateApps(apps) {
         apps.forEach(function(app) {
-          let name = app.manifest.name;
-          identity.add(scheme, name + '.' + host, port);
+          urls.push(app.origin);
+
+          let origin = app.origin.substring(7, app.origin.length).split(':')[0];
+          identity.add(scheme, origin, port);
         });
-        loadHome();
+        loadHome(urls);
       });
-      allowIndexedDB(homeURL);
     } catch (e) {
       let msg = 'Fatal error during startup: [' + e + ':' + e.lineNumber +
                 '[' + homeURL + ']';
