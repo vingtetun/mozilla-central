@@ -153,7 +153,8 @@ var shell = {
       let identity = server.identity;
       window.navigator.mozApps.enumerate(function enumerateApps(apps) {
         apps.forEach(function(app) {
-          identity.add(scheme, app + '.' + host, port);
+          let name = app.manifest.name;
+          identity.add(scheme, name + '.' + host, port);
         });
         loadHome();
       });
