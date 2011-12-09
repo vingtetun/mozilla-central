@@ -45,6 +45,8 @@ const LocalFile = CC('@mozilla.org/file/local;1',
 
 Cu.import('resource://gre/modules/XPCOMUtils.jsm');
 Cu.import('resource://gre/modules/Services.jsm');
+Cu.import("resource://gre/modules/Webapps.jsm");
+
 XPCOMUtils.defineLazyGetter(Services, 'env', function() {
   return Cc['@mozilla.org/process/environment;1']
            .getService(Ci.nsIEnvironment);
@@ -63,19 +65,37 @@ XPCOMUtils.defineLazyGetter(Services, 'fm', function() {
 // a local http server listening on http://127.0.0.1:8888 and
 // http://localhost:8888.
 function startupHttpd(baseDir, port) {
+  let useHttpd = true;
+  try {
+    useHttpd = !Services.prefs.getBoolPref('b2g.httpd.disable');
+  } catch (e) {}
+
+  if (!useHttpd) {
+    return {
+      identity: {
+        add: function() {}
+      }
+    }
+  }
+
   const httpdURL = 'chrome://browser/content/httpd.js';
   let httpd = {};
   Services.scriptloader.loadSubScript(httpdURL, httpd);
+
   let server = new httpd.nsHttpServer();
   server.registerDirectory('/', new LocalFile(baseDir));
   server.start(port);
+  return server;
 }
 
 // XXX until we have a security model, just let the pre-installed
 // app used indexedDB.
-function allowIndexedDB(url) {
-  let uri = Services.io.newURI(url, null, null);
-  Services.perms.add(uri, 'indexedDB', Ci.nsIPermissionManager.ALLOW_ACTION);
+function allowIndexedDB(urls) {
+  urls.forEach(function(url) {
+    let uri = Services.io.newURI(url, null, null);
+    let allow = Ci.nsIPermissionManager.ALLOW_ACTION;
+    Services.perms.add(uri, 'indexedDB', allow);
+  });
 }
 
 
@@ -116,32 +136,53 @@ var shell = {
     window.addEventListener('keypress', this);
     this.home.addEventListener('load', this, true);
 
+
+    let browser = this.home;
+    function loadHome(urls) {
+      allowIndexedDB(urls);
+
+      browser.homePage = homeURL;
+      browser.goHome();
+    }
+
     try {
       Services.io.offline = false;
 
       let fileScheme = 'file://';
-      if (homeURL.substring(0, fileScheme.length) == fileScheme) {
-        homeURL = homeURL.replace(fileScheme, '');
-
-        let baseDir = homeURL.split('/');
-        baseDir.pop();
-        baseDir = baseDir.join('/');
-
-        const SERVER_PORT = 8888;
-        startupHttpd(baseDir, SERVER_PORT);
-
-        let baseHost = 'http://localhost';
-        homeURL = homeURL.replace(baseDir, baseHost + ':' + SERVER_PORT);
+      if (homeURL.substring(0, fileScheme.length) != fileScheme) {
+        loadHome([homeURL]);
+        return;
       }
-      allowIndexedDB(homeURL);
+
+      homeURL = homeURL.replace(fileScheme, '');
+
+      let baseDir = homeURL.split('/');
+      baseDir.pop();
+      baseDir = baseDir.join('/');
+
+      const port = 8888;
+      let server = startupHttpd(baseDir, port);
+
+      let scheme = 'http';
+      let host = 'homescreen.gaia.org';
+      homeURL = homeURL.replace(baseDir, scheme + '://' + host + ':' + port);
+
+      let urls = [];
+      let identity = server.identity;
+      window.navigator.mozApps.enumerate(function enumerateApps(apps) {
+        apps.forEach(function(app) {
+          urls.push(app.origin);
+
+          let origin = app.origin.substring(7, app.origin.length).split(':')[0];
+          identity.add(scheme, origin, port);
+        });
+        loadHome(urls);
+      });
     } catch (e) {
-      let msg = 'Fatal error during startup: [' + e + '[' + homeURL + ']';
+      let msg = 'Fatal error during startup: [' + e + ':' + e.lineNumber +
+                '[' + homeURL + ']';
       return alert(msg);
     }
-
-    let browser = this.home;
-    browser.homePage = homeURL;
-    browser.goHome();
   },
 
   stop: function shell_stop() {
@@ -169,7 +210,7 @@ var shell = {
   doCommand: function shell_doCommand(cmd) {
     switch (cmd) {
       case 'cmd_close':
-        this.sendEvent(this.home.contentWindow, 'appclose');
+        this.home.contentWindow.postMessage('appclose', '*');
         break;
     }
   },
