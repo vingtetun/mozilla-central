@@ -2705,7 +2705,7 @@ ServerHandler.prototype =
       response.setHeader("Content-Type", type, false);
       maybeAddHeaders(file, metadata, response);
       response.setHeader("Content-Length", "" + count, false);
-      response.setHeader("Access-Control-Allow-Origin", "*",false);
+      response.setHeader("Access-Control-Allow-Origin", "*", false);
 
       var fis = new FileInputStream(file, PR_RDONLY, 0444,
                                     Ci.nsIFileInputStream.CLOSE_ON_EOF);

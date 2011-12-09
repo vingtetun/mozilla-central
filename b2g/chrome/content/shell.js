@@ -65,13 +65,26 @@ XPCOMUtils.defineLazyGetter(Services, 'fm', function() {
 // a local http server listening on http://127.0.0.1:8888 and
 // http://localhost:8888.
 function startupHttpd(baseDir, port) {
-  const httpdURL = 'chrome://browser/content/httpd.js';
+  let useHttpd = true;
+  try {
+    useHttpd = !Services.prefs.getBoolPref('b2g.httpd.disable');
+  } catch (e) {}
 
+  if (!useHttpd) {
+    return {
+      identity: {
+        add: function() {}
+      }
+    }
+  }
+
+  const httpdURL = 'chrome://browser/content/httpd.js';
   let httpd = {};
   Services.scriptloader.loadSubScript(httpdURL, httpd);
 
   let server = new httpd.nsHttpServer();
   server.registerDirectory('/', new LocalFile(baseDir));
+  server.registerContentType('appcache', 'text/cache-manifest');
   server.start(port);
   return server;
 }
@@ -122,6 +135,7 @@ var shell = {
 
     window.controllers.appendController(this);
     window.addEventListener('keypress', this);
+    window.addEventListener('MozApplicationManifest', this);
     this.home.addEventListener('load', this, true);
 
 
@@ -152,7 +166,7 @@ var shell = {
       let server = startupHttpd(baseDir, port);
 
       let scheme = 'http';
-      let host = 'gaia.org';
+      let host = 'homescreen.gaia.org';
       homeURL = homeURL.replace(baseDir, scheme + '://' + host + ':' + port);
 
       let urls = [];
@@ -176,6 +190,7 @@ var shell = {
   stop: function shell_stop() {
     window.controllers.removeController(this);
     window.removeEventListener('keypress', this);
+    window.removeEventListener('MozApplicationManifest', this);
   },
 
   supportsCommand: function shell_supportsCommand(cmd) {
@@ -198,7 +213,7 @@ var shell = {
   doCommand: function shell_doCommand(cmd) {
     switch (cmd) {
       case 'cmd_close':
-        this.sendEvent(this.home.contentWindow, 'appclose');
+        this.home.contentWindow.postMessage('appclose', '*');
         break;
     }
   },
@@ -223,6 +238,29 @@ var shell = {
       case 'load':
         this.home.removeEventListener('load', this, true);
         this.sendEvent(window, 'ContentStart');
+        break;
+      case 'MozApplicationManifest':
+        try {
+          let contentWindow = evt.originalTarget.defaultView;
+          let documentElement = contentWindow.document.documentElement;
+          if (!documentElement)
+            return;
+
+          let manifest = documentElement.getAttribute("manifest");
+          if (!manifest)
+            return;
+
+          let documentURI = contentWindow.document.documentURIObject;
+          let manifestURI = Services.io.newURI(manifest, null, documentURI);
+          Services.perms.add(documentURI, 'offline-app',
+                             Ci.nsIPermissionManager.ALLOW_ACTION);
+
+          let updateService = Cc['@mozilla.org/offlinecacheupdate-service;1']
+                              .getService(Ci.nsIOfflineCacheUpdateService);
+          updateService.scheduleUpdate(manifestURI, documentURI, window);
+        } catch (e) {
+          dump('Error while creating offline cache: ' + e + '\n');
+        }
         break;
     }
   },

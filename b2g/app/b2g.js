@@ -46,6 +46,9 @@ pref("browser.homescreenURL", "file:///system/home/homescreen.html");
 pref("browser.homescreenURL", "file:///data/local/homescreen.html,file:///system/home/homescreen.html");
 #endif
 
+// Disable the built-in http server
+pref("b2g.httpd.disable", false);
+
 // Device pixel to CSS px ratio, in percent. Set to -1 to calculate based on display density.
 pref("browser.viewport.scaleRatio", -1);
 
@@ -65,11 +68,7 @@ pref("browser.cache.memory.capacity", 1024); // kilobytes
 pref("image.cache.size", 1048576); // bytes
 
 /* offline cache prefs */
-pref("browser.offline-apps.notify", true);
-pref("browser.cache.offline.enable", true);
-pref("browser.cache.offline.capacity", 5120); // kilobytes
-pref("offline-apps.quota.max", 2048); // kilobytes
-pref("offline-apps.quota.warn", 1024); // kilobytes
+pref("browser.offline-apps.notify", false);
 
 /* protocol warning prefs */
 pref("network.protocol-handler.warn-external.tel", false);
