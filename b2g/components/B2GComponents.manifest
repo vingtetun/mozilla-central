@@ -1,5 +1,0 @@
-# DirectoryProvider.js
-component {ef0f7a87-c1ee-45a8-8d67-26f586e46a4b} DirectoryProvider.js
-contract @mozilla.org/browser/directory-provider;1 {ef0f7a87-c1ee-45a8-8d67-26f586e46a4b}
-category xpcom-directory-providers browser-directory-provider @mozilla.org/browser/directory-provider;1
-
